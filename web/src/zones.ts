@@ -61,8 +61,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   workshop: {
     id: "workshop",
     label: "Workshop",
-    centre: { x: -13, z: -5 },
-    half: { x: 8, z: 7 },
+    centre: { x: -15.6, z: -6 },
+    half: { x: 9.6, z: 8.4 },
     colour: 0x4c5a7a,
     arrangement: "desks",
     backWall: 3.2,
@@ -73,8 +73,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   park: {
     id: "park",
     label: "Park",
-    centre: { x: 0, z: 9 },
-    half: { x: 8, z: 4 },
+    centre: { x: 0, z: 10.8 },
+    half: { x: 9.6, z: 4.8 },
     colour: 0x4e7c58,
     arrangement: "bench",
     info:
@@ -85,8 +85,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   cafe: {
     id: "cafe",
     label: "Cafe",
-    centre: { x: 14, z: -5 },
-    half: { x: 9.5, z: 7.5 },
+    centre: { x: 16.8, z: -6 },
+    half: { x: 11.4, z: 9 },
     colour: 0x8a7050,
     arrangement: "table",
     info: "Finished its turn and idle. Sessions are retired from here after an hour of silence.",
@@ -94,8 +94,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   infirmary: {
     id: "infirmary",
     label: "Infirmary",
-    centre: { x: 14, z: 11.5 },
-    half: { x: 5, z: 3.5 },
+    centre: { x: 16.8, z: 13.8 },
+    half: { x: 6, z: 4.2 },
     colour: 0x834850,
     arrangement: "grid",
     backWall: 3.0,
@@ -106,8 +106,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   library: {
     id: "library",
     label: "Library",
-    centre: { x: -14, z: 11.5 },
-    half: { x: 5, z: 3.5 },
+    centre: { x: -16.8, z: 13.8 },
+    half: { x: 6, z: 4.2 },
     colour: 0x615186,
     arrangement: "grid",
     backWall: 3.4,
@@ -118,8 +118,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   hotel: {
     id: "hotel",
     label: "Hotel",
-    centre: { x: 28, z: 15 },
-    half: { x: 7, z: 7 },
+    centre: { x: 33.6, z: 18 },
+    half: { x: 9, z: 9 },
     colour: 0x3d5d6b,
     arrangement: "beds",
     backWall: 3.0,
@@ -130,8 +130,8 @@ export const ZONES: Record<ZoneId, Zone> = {
   door: {
     id: "door",
     label: "Front door",
-    centre: { x: 0, z: 16 },
-    half: { x: 2, z: 1 },
+    centre: { x: 0, z: 19.2 },
+    half: { x: 2.4, z: 1.2 },
     colour: 0x363d4d,
     arrangement: "point",
     info: "Arriving or leaving. New sessions walk in here, and ended ones walk out.",
@@ -246,11 +246,11 @@ export function deskPosition(zone: Zone, index: number): Vec2 {
  * The hotel's dormitory.
  *
  * Sized for a working day rather than a moment: everything that finished since this morning
- * ends up here, which is a dozen or more sessions on a normal day and far more than any other
+ * ends up here, which is fifteen or more sessions on a normal day and far more than any other
  * zone has to hold at once.
  */
-const BED_COLS = 5;
-const BED_ROWS = 3;
+const BED_COLS = 6;
+const BED_ROWS = 4;
 export const HOTEL_BEDS = BED_COLS * BED_ROWS;
 const BED_PITCH_X = 2.7;
 /** A bed is two units long, so this leaves room to walk between the foot of one and the next. */
@@ -345,7 +345,7 @@ export function slotPosition(zoneId: ZoneId, index: number, total: number): Slot
         return { x: bed.x, z: bed.z + BED_SIT_OFFSET, facing: 0, seated: true };
       }
       // A busy day overflows. The spare floor is the strip in front of the last row of beds.
-      return grid(zone, index - HOTEL_BEDS, n - HOTEL_BEDS, { offsetZ: 4.5, insetZ: 4.2 });
+      return grid(zone, index - HOTEL_BEDS, n - HOTEL_BEDS, { offsetZ: 6.4, insetZ: 7.0 });
     }
 
     case "grid":

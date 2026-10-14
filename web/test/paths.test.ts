@@ -44,18 +44,18 @@ interface Fence {
  */
 const FENCES: Fence[] = [
   // Workshop: walls on the far and left edges.
-  { zone: "workshop", axis: "z", at: -12, from: -21, to: -5 },
-  { zone: "workshop", axis: "x", at: -21, from: -12, to: 2 },
+  { zone: "workshop", axis: "z", at: -14.4, from: -25.2, to: -6 },
+  { zone: "workshop", axis: "x", at: -25.2, from: -14.4, to: 2.4 },
   // Cafe: railings on the far and left edges. The left one is what agents used to walk over.
-  { zone: "cafe", axis: "z", at: -12.5, from: 4.5, to: 23.5 },
-  { zone: "cafe", axis: "x", at: 4.5, from: -12.5, to: 2.5 },
+  { zone: "cafe", axis: "z", at: -15, from: 5.4, to: 28.2 },
+  { zone: "cafe", axis: "x", at: 5.4, from: -15, to: 3 },
   // Library and infirmary: left wall solid, back wall has the doorway in it.
-  { zone: "library", axis: "x", at: -19, from: 8, to: 15 },
-  { zone: "library", axis: "z", at: 8, from: -19, to: -9 },
-  { zone: "infirmary", axis: "x", at: 9, from: 8, to: 15 },
-  { zone: "infirmary", axis: "z", at: 8, from: 9, to: 19 },
-  { zone: "hotel", axis: "x", at: 21, from: 8, to: 22 },
-  { zone: "hotel", axis: "z", at: 8, from: 21, to: 35 },
+  { zone: "library", axis: "x", at: -22.8, from: 9.6, to: 18 },
+  { zone: "library", axis: "z", at: 9.6, from: -22.8, to: -10.8 },
+  { zone: "infirmary", axis: "x", at: 10.8, from: 9.6, to: 18 },
+  { zone: "infirmary", axis: "z", at: 9.6, from: 10.8, to: 22.8 },
+  { zone: "hotel", axis: "x", at: 24.6, from: 9, to: 27 },
+  { zone: "hotel", axis: "z", at: 9, from: 24.6, to: 42.6 },
 ];
 
 /** Where a fence is broken by one of the zone's doorways, so a crossing there is legal. */
