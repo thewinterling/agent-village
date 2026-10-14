@@ -26,6 +26,7 @@ import {
   villageBounds,
   zoneFor,
 } from "../src/zones";
+import { zoneAt } from "../src/paths";
 
 function agent(overrides: Partial<Agent> & { sessionId: string }): Agent {
   return {
@@ -273,13 +274,16 @@ describe("slotPosition", () => {
     expect(slotPosition("workshop", 2, 5)).toEqual(slotPosition("workshop", 2, 5));
   });
 
-  it("keeps everyone inside their zone", () => {
+  /**
+   * Strictly inside, however busy the zone gets. The road network only reaches the gate, and an
+   * avatar walks the last stretch straight, so a slot past the fence means a walk across the grass.
+   */
+  it("keeps everyone inside their zone, even on a busy day", () => {
     for (const zone of Object.values(ZONES)) {
-      if (zone.arrangement === "point") continue;
-      for (let i = 0; i < 12; i++) {
-        const p = slotPosition(zone.id, i, 12);
-        expect(Math.abs(p.x - zone.centre.x)).toBeLessThanOrEqual(zone.half.x + 2.2);
-        expect(Math.abs(p.z - zone.centre.z)).toBeLessThanOrEqual(zone.half.z + 2.2);
+      for (const n of [1, 12, 40]) {
+        for (let i = 0; i < n; i++) {
+          expect(zoneAt(slotPosition(zone.id, i, n)), `${zone.id} ${i}/${n}`).toBe(zone.id);
+        }
       }
     }
   });
@@ -460,6 +464,22 @@ describe("layout", () => {
     const spanAlpha = Math.hypot(p.get("a1")!.x - p.get("a2")!.x, p.get("a1")!.z - p.get("a2")!.z);
     const crossRepo = Math.hypot(p.get("a1")!.x - p.get("b2")!.x, p.get("a1")!.z - p.get("b2")!.z);
     expect(spanAlpha).toBeLessThan(crossRepo);
+  });
+
+  it("keeps a subagent in its own zone when its parent is somewhere else", () => {
+    const agents = [
+      agent({ sessionId: "parent", state: "waiting" }),
+      agent({ sessionId: "parent:child", parentSessionId: "parent", isSubagent: true }),
+    ];
+    expect(zoneAt(layout(agents).get("parent:child")!)).toBe("workshop");
+  });
+
+  it("keeps a subagent inside the zone when its parent sits by the fence", () => {
+    const agents = Array.from({ length: 24 }, (_, i) => agent({ sessionId: `p${String(i).padStart(2, "0")}`, state: "done" }));
+    const children = agents.map((a) =>
+      agent({ sessionId: `${a.sessionId}:c`, parentSessionId: a.sessionId, isSubagent: true, state: "done" }),
+    );
+    for (const p of layout([...agents, ...children]).values()) expect(zoneAt(p)).toBe("cafe");
   });
 
   it("parks a subagent next to its parent rather than in its own slot", () => {

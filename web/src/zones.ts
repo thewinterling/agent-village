@@ -276,7 +276,27 @@ export function bedPosition(zone: Zone, index: number): Vec2 {
  * every frame it would jitter across the floor instead of standing still.
  */
 export function slotPosition(zoneId: ZoneId, index: number, total: number): Slot {
-  const zone = ZONES[zoneId];
+  return insideZone(ZONES[zoneId], arrangedSlot(ZONES[zoneId], index, total));
+}
+
+/** How far from the fence a slot must stay, so nobody stands with an elbow through it. */
+const FENCE_CLEARANCE = 0.5;
+
+/**
+ * The slot pulled back inside the zone.
+ *
+ * The road network only reaches a zone's gate and the last stretch to the slot is walked
+ * straight, so a slot past the fence is a walk across the grass and through the railing.
+ * shortcut: overflow past what the furniture holds piles up along the fence; give the zone a
+ * proper overflow arrangement if that becomes a normal day.
+ */
+function insideZone(zone: Zone, slot: Slot): Slot {
+  const clamp = (v: number, c: number, half: number) =>
+    Math.min(c + half - FENCE_CLEARANCE, Math.max(c - half + FENCE_CLEARANCE, v));
+  return { ...slot, x: clamp(slot.x, zone.centre.x, zone.half.x), z: clamp(slot.z, zone.centre.z, zone.half.z) };
+}
+
+function arrangedSlot(zone: Zone, index: number, total: number): Slot {
   const n = Math.max(1, total);
 
   switch (zone.arrangement) {
@@ -403,9 +423,11 @@ export function layout(agents: Agent[]): Map<string, Slot> {
     const ordered = zoneId === "workshop" ? groupByRepo(list) : stableSort(list);
     ordered.forEach((agent, i) => {
       const base = slotPosition(zoneId, i, ordered.length);
-      // Subagents stand just behind their parent rather than taking a slot of their own.
+      // Subagents stand just behind their parent rather than taking a slot of their own - but
+      // only in the same zone. A parent elsewhere would pull the child out of its own zone.
       const parent = agent.parentSessionId ? out.get(agent.parentSessionId) : undefined;
-      out.set(agent.sessionId, parent ? { x: parent.x + 1.1, z: parent.z + 1.1 } : base);
+      const together = parent && list.some((a) => a.sessionId === agent.parentSessionId);
+      out.set(agent.sessionId, together ? insideZone(ZONES[zoneId], { x: parent.x + 1.1, z: parent.z + 1.1 }) : base);
     });
   }
   return out;
