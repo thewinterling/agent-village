@@ -1,0 +1,14 @@
+[Unit]
+Description=Agent Village - live overview of local coding agents
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/workspace/agent-village/.venv/bin/villaged
+Restart=always
+RestartSec=2
+# The spool, the SQLite history and the config backups all live here.
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

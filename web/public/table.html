@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Agent Village - debug table</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; padding: 1.5rem;
+        background: #11131a; color: #e7e9ee;
+        font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      }
+      h1 { font-size: 15px; margin: 0 0 0.25rem; font-weight: 600; letter-spacing: 0.02em; }
+      .sub { color: #7d8597; margin-bottom: 1.25rem; }
+      .counts { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+      .pill {
+        padding: 0.2rem 0.6rem; border-radius: 999px;
+        background: #1b1f2a; border: 1px solid #272c3a;
+      }
+      .pill b { color: #fff; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td {
+        text-align: left; padding: 0.4rem 0.7rem;
+        border-bottom: 1px solid #1f232e; vertical-align: top;
+      }
+      th { color: #7d8597; font-weight: 500; position: sticky; top: 0; background: #11131a; }
+      td.name { max-width: 20rem; }
+      td.detail { color: #9aa3b5; max-width: 28rem; overflow-wrap: anywhere; }
+      .state { font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 4px; }
+      .working    { background: #1d3a5c; color: #8fc4ff; }
+      .thinking   { background: #2a2d52; color: #b0b4ff; }
+      .waiting    { background: #5c441d; color: #ffd089; }
+      .blocked    { background: #5c1d22; color: #ff9aa2; }
+      .done       { background: #1d4a33; color: #87e6b0; }
+      .compacting { background: #3a2c4f; color: #d2a8ff; }
+      .sleeping { background: #2b3047; color: #7e86b5; }
+      .spawning   { background: #2b2f38; color: #c3cad8; }
+      .gone       { background: #22252e; color: #6a7183; }
+      .guess { color: #c49a5a; }
+      .attention::after { content: " \25CF"; color: #87e6b0; }
+      .empty { color: #6a7183; padding: 2rem 0; }
+      #status { position: fixed; top: 0.6rem; right: 1rem; color: #6a7183; }
+      .off { color: #ff9aa2; }
+    </style>
+  </head>
+  <body>
+    <div id="status">connecting&hellip;</div>
+    <h1>Agent Village</h1>
+    <div class="sub">
+      Phase 1 checkpoint. If this table is not useful, the 3D world will not save it.
+    </div>
+    <div class="counts" id="counts"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>state</th><th>for</th><th>src</th><th>name</th>
+          <th>repo / branch</th><th>tool</th><th>detail</th><th>model</th><th>turns</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty">No agents yet. Start a Claude Code or Cursor session.</div>
+
+    <script type="module">
+      const rows = document.getElementById("rows");
+      const counts = document.getElementById("counts");
+      const empty = document.getElementById("empty");
+      const status = document.getElementById("status");
+
+      const ORDER = ["waiting", "blocked", "working", "thinking", "compacting", "spawning", "done", "sleeping", "gone"];
+      const dur = (s) =>
+        s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
+      const esc = (v) =>
+        String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+      function render(world) {
+        const agents = [...world.agents].sort(
+          (a, b) => ORDER.indexOf(a.state) - ORDER.indexOf(b.state) || b.stateAgeS - a.stateAgeS
+        );
+        empty.style.display = agents.length ? "none" : "block";
+
+        counts.innerHTML = ORDER.filter((s) => world.counts?.[s])
+          .map((s) => `<span class="pill">${s} <b>${world.counts[s]}</b></span>`)
+          .join("") + (world.stats
+            ? `<span class="pill">today: <b>${world.stats.turns}</b> turns, ` +
+              `<b>${world.stats.benchVisits}</b> bench visits, <b>${world.stats.failures}</b> failures</span>`
+            : "");
+
+        rows.innerHTML = agents
+          .map((a) => {
+            const guess = a.waitingInferred ? ' <span class="guess" title="inferred, not reported">?</span>' : "";
+            const tool = a.currentTool ?? (a.openTools[0]?.name ?? "");
+            const detail = a.openTools[0]?.detail ?? a.recentTools.at(-1)?.detail ?? a.lastPrompt ?? "";
+            return `<tr>
+              <td><span class="state ${a.state}">${a.state}</span>${guess}</td>
+              <td>${dur(a.stateAgeS)}</td>
+              <td>${esc(a.source)}</td>
+              <td class="name ${a.needsAttention ? "attention" : ""}">${esc(a.name)}</td>
+              <td>${esc(a.repo ?? "")}${a.gitBranch ? " / " + esc(a.gitBranch) : ""}</td>
+              <td>${esc(tool)}</td>
+              <td class="detail">${esc(detail).slice(0, 160)}</td>
+              <td>${esc((a.model ?? "").replace("claude-", ""))}</td>
+              <td>${a.turns}</td>
+            </tr>`;
+          })
+          .join("");
+      }
+
+      function connect() {
+        const ws = new WebSocket(`ws://${location.host}/ws`);
+        ws.onopen = () => (status.textContent = "live", status.className = "");
+        ws.onmessage = (e) => render(JSON.parse(e.data));
+        ws.onclose = () => {
+          status.textContent = "disconnected - retrying";
+          status.className = "off";
+          setTimeout(connect, 1500);
+        };
+      }
+      connect();
+    </script>
+  </body>
+</html>

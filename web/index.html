@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Village</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d0f14;
+        --panel: rgba(20, 23, 31, 0.92);
+        --line: #272c3a;
+        --dim: #7d8597;
+        --fg: #e7e9ee;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+        font: 13px/1.55 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      #stage { display: block; width: 100vw; height: 100vh; touch-action: none; }
+      #stage.panning { cursor: grabbing !important; }
+
+      /* zone (i) badges, pinned to each sign in the render loop */
+      #zone-layer { position: fixed; inset: 0; pointer-events: none; z-index: 15; }
+      .zi-dot { position: absolute; top: 0; left: 0; pointer-events: auto; cursor: help;
+        width: 17px; height: 17px; border-radius: 50%; padding: 0; font: 600 11px/17px serif;
+        font-style: italic; background: rgba(20, 23, 31, 0.9); border: 1px solid var(--line);
+        color: var(--dim); }
+      .zi-dot:hover { color: #fff; border-color: #8fc4ff; }
+      .zi-pop { position: absolute; top: 0; left: 0; width: 290px; padding: 11px 13px; z-index: 16;
+        pointer-events: none; }
+      .zi-head { font-weight: 650; margin-bottom: 6px; }
+      .zi-states { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--dim);
+        margin-bottom: 8px; }
+      .zi-states i { width: 7px; height: 7px; border-radius: 50%; display: inline-block;
+        margin-right: 5px; }
+      .zi-pop p { margin: 0; font-size: 12px; color: var(--fg); }
+
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+        backdrop-filter: blur(8px); }
+
+      /* top-left chrome */
+      #topbar { position: fixed; top: 14px; left: 14px; display: flex; flex-direction: column; gap: 8px; }
+      #title { font-weight: 650; letter-spacing: 0.02em; font-size: 14px; }
+      #title span { color: var(--dim); font-weight: 400; }
+      #counts { display: flex; gap: 6px; flex-wrap: wrap; }
+      .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+        background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
+      .pill i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+      .pill b { color: #fff; }
+
+      /* top-right */
+      #topright { position: fixed; top: 14px; right: 14px; display: flex; align-items: center; gap: 10px; }
+      #status { color: #87e6b0; font-size: 12px; }
+      #status.off { color: #ff9aa2; }
+      #sound-toggle, #reset-view { cursor: pointer; padding: 4px 10px; border-radius: 999px;
+        font-size: 12px; background: var(--panel); border: 1px solid var(--line); color: var(--dim); }
+      #reset-view:hover { color: var(--fg); }
+      #sound-toggle.on { color: #87e6b0; border-color: #2f5c43; }
+
+      /* bottom strip */
+      #bottom { position: fixed; left: 14px; bottom: 14px; right: 14px; display: flex; gap: 12px;
+        align-items: center; }
+      #stats { display: flex; gap: 14px; font-size: 12px; color: var(--dim); padding: 6px 12px;
+        border-radius: 999px; background: var(--panel); border: 1px solid var(--line); white-space: nowrap; }
+      #timeline { flex: 1; display: flex; align-items: center; gap: 10px; padding: 5px 11px;
+        border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+      #timeline .tl-cap { font-size: 11px; color: var(--dim); white-space: nowrap; }
+      #scrubber { flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 26px; overflow: hidden; }
+      #scrubber i { position: relative; flex: 0 0 5px; border-radius: 1px; cursor: pointer;
+        background: #3f6ea8; }
+      /* The generated share, stacked on top of what was read. */
+      #scrubber i b { position: absolute; inset: 0 0 auto 0; border-radius: 1px; background: #e0a458; }
+      #scrubber i:hover { box-shadow: 0 0 0 1px #e7e9ee; }
+      #scrubber:empty::after { content: "no token usage in the last few hours";
+        font-size: 11px; color: var(--dim); align-self: center; }
+
+      /* hover card */
+      #hover { position: fixed; top: 0; left: 0; display: none; max-width: 330px; padding: 10px 12px;
+        pointer-events: none; z-index: 20; background: var(--panel); border: 1px solid var(--line);
+        border-radius: 10px; }
+      /* Branch names get long. Let them wrap rather than widen the card or spill out of it. */
+      .hv-name { font-weight: 650; margin-bottom: 1px; overflow-wrap: anywhere; }
+      .hv-sub { font-size: 12px; color: #aeb6c6; margin-bottom: 3px; }
+      .story { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .story li { border-left: 2px solid #3f6ea8; padding-left: 9px; }
+    .st-ask { font-weight: 600; overflow-wrap: anywhere; }
+    .st-out { color: #c6cdda; margin-top: 2px; overflow-wrap: anywhere; }
+    .st-meta { font-size: 11px; color: var(--dim); margin-top: 3px; }
+    .prompt-box { display: flex; gap: 8px; align-items: stretch; }
+    .prompt-box textarea {
+      flex: 1; resize: vertical; font: inherit; font-size: 13px; padding: 6px 8px;
+      color: #e7e9ee; background: #1b2029; border: 1px solid #3a4150; border-radius: 6px;
+    }
+    .prompt-box textarea:focus { outline: none; border-color: #3f6ea8; }
+    .prompt-box button { align-self: flex-end; padding: 6px 14px; }
+    .drawer-sub { font-size: 13px; color: #aeb6c6; margin: -6px 0 10px; }
+      .hv-state { font-size: 12px; margin-bottom: 7px; }
+      .hv-hint { color: var(--dim); font-size: 11px; margin-top: 7px; }
+      #hover dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 12px; }
+      #hover dt { color: var(--dim); }
+      #hover dd { margin: 0; overflow-wrap: anywhere; }
+      .dim { color: var(--dim); }
+      .guess { color: #c49a5a; }
+
+      /* detail drawer */
+      #drawer { position: fixed; top: 0; right: 0; width: 430px; max-width: 92vw; height: 100%;
+        transform: translateX(105%); transition: transform 180ms ease; z-index: 30;
+        background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+      #drawer.open { transform: none; }
+      #drawer-head { display: flex; justify-content: flex-end; padding: 10px 12px 0; }
+      #drawer-close { cursor: pointer; background: none; border: none; color: var(--dim); font-size: 20px;
+        line-height: 1; }
+      #drawer-body { overflow-y: auto; padding: 4px 20px 28px; }
+      #drawer-body h2 { font-size: 16px; margin: 0 0 10px; overflow-wrap: anywhere; }
+      #drawer-body h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--dim); margin: 20px 0 7px; font-weight: 600; }
+      #drawer-body section { border-top: 1px solid var(--line); }
+      #drawer-body section:first-of-type { border-top: none; }
+      #drawer-body pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; font-size: 12px;
+        background: #11131a; border: 1px solid var(--line); border-radius: 6px; padding: 9px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line);
+        color: var(--dim); }
+      .kv { display: flex; justify-content: space-between; gap: 14px; padding: 2px 0; font-size: 12px; }
+      .kv span:first-child { color: var(--dim); }
+      .kv span:last-child { overflow-wrap: anywhere; text-align: right; }
+      ul.timeline, ul.files { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+      ul.timeline li { padding: 5px 0; border-bottom: 1px solid #1b1f29; }
+      ul.timeline li.bad b { color: #ff9aa2; }
+      ul.files li { padding: 1px 0; overflow-wrap: anywhere; color: var(--dim); }
+      .copy-row { display: flex; gap: 8px; align-items: center; }
+      .copy-row code { flex: 1; font-size: 12px; background: #11131a; border: 1px solid var(--line);
+        border-radius: 6px; padding: 7px 9px; overflow-wrap: anywhere; }
+      .copy-row button { cursor: pointer; background: #22283a; border: 1px solid var(--line);
+        color: var(--fg); border-radius: 6px; padding: 7px 11px; font-size: 12px; }
+      .mrs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+      .mrs a { display: flex; align-items: center; gap: 9px; text-decoration: none;
+        background: #11131a; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; }
+      .mrs a:hover { border-color: #8fc4ff; }
+      .mr-num { font-weight: 600; color: #ffb43d; font-size: 12px; flex: none; }
+      .mr-repo { color: var(--fg); font-size: 12px; overflow-wrap: anywhere; }
+      .actions { display: flex; gap: 8px; }
+      .actions button { cursor: pointer; flex: 1; background: #22283a; border: 1px solid var(--line);
+        color: var(--fg); border-radius: 6px; padding: 8px 11px; font-size: 12px; }
+      .actions button:hover:not(:disabled) { background: #2b3248; }
+      .actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+      .actions button.danger { border-color: #6b3a40; color: #ff9aa2; }
+      .actions button.armed { background: #ff9aa2; border-color: #ff9aa2; color: #11131a; font-weight: 600; }
+      .act-note { margin-top: 8px; font-size: 11px; line-height: 1.45; }
+      .session-id { font-size: 11px; margin-top: 22px; overflow-wrap: anywhere; }
+      a { color: #8fc4ff; }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <div id="zone-layer"></div>
+
+    <div id="topbar">
+      <div id="title" class="panel" style="padding: 7px 12px">
+        Agent Village <span>&mdash; hover an avatar, click for detail. Drag to pan, scroll to zoom.</span>
+      </div>
+      <div id="counts"></div>
+    </div>
+
+    <div id="topright">
+      <div id="reset-view" title="back to the default framing">reset view</div>
+      <div id="sound-toggle">sound off</div>
+      <div id="status" class="panel" style="padding: 4px 10px">connecting&hellip;</div>
+    </div>
+
+    <div id="bottom">
+      <div id="stats"></div>
+      <div id="timeline">
+        <span class="tl-cap" id="scrubber-cap">tokens</span>
+        <div id="scrubber"></div>
+        <span class="tl-cap">now</span>
+      </div>
+    </div>
+
+    <div id="hover"></div>
+
+    <aside id="drawer">
+      <div id="drawer-head"><button id="drawer-close" title="close (esc)">&times;</button></div>
+      <div id="drawer-body"></div>
+    </aside>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
