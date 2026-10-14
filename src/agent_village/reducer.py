@@ -19,6 +19,7 @@ from datetime import datetime
 from .models import (
     MAX_FILES_TOUCHED,
     MAX_RECENT_TOOLS,
+    RECENT_PROMPTS,
     Agent,
     AgentState,
     EventKind,
@@ -66,6 +67,13 @@ _ACTIVITY_KINDS = frozenset(
         EventKind.COMPACT_END,
     }
 )
+
+
+def _remember(prompts: tuple[str, ...], text: str | None) -> tuple[str, ...]:
+    """Append a prompt to the short history a live title is written from."""
+    if not text:
+        return prompts
+    return (*prompts, text)[-RECENT_PROMPTS:]
 
 
 def _ensure(world: World, event: VillageEvent) -> Agent:
@@ -231,6 +239,7 @@ def apply(world: World, event: VillageEvent, config: ReducerConfig = DEFAULT_CON
                 AgentState.THINKING,
                 ts,
                 last_prompt=event.text or agent.last_prompt,
+                recent_prompts=_remember(agent.recent_prompts, event.text),
                 turns=agent.turns + 1,
                 needs_attention=False,
             )
@@ -315,6 +324,9 @@ def apply(world: World, event: VillageEvent, config: ReducerConfig = DEFAULT_CON
         case EventKind.TITLE:
             agent = replace(agent, title=event.title or agent.title)
 
+        case EventKind.LIVE_TITLE:
+            agent = replace(agent, live_title=event.title or agent.live_title)
+
         case EventKind.PLAN:
             if event.file_path:
                 counts = dict(agent.plan_mentions)
@@ -332,6 +344,8 @@ def apply(world: World, event: VillageEvent, config: ReducerConfig = DEFAULT_CON
             agent = replace(
                 agent,
                 last_prompt=event.text or agent.last_prompt,
+                # Backfill knows only the last prompt. Enough to title from until more arrive.
+                recent_prompts=agent.recent_prompts or _remember((), event.text),
                 last_assistant=event.tool_detail or agent.last_assistant,
             )
 

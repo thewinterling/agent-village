@@ -66,6 +66,9 @@ class EventKind(StrEnum):
     SUBAGENT_START = "subagent_start"
     SUBAGENT_STOP = "subagent_stop"
     TITLE = "title"
+    #: A title regenerated from the latest prompts. Kept apart from `TITLE`, which is the one
+    #: Claude Code wrote at the start of the session and stays the fallback.
+    LIVE_TITLE = "live_title"
     PR_LINK = "pr_link"
     #: One mention of a plan file. Emitted per mention rather than once per plan, because
     #: which plan is *being followed* is a question of how often it comes up.
@@ -156,10 +159,14 @@ class Agent:
     last_event_at: datetime
     spawned_at: datetime
     title: str | None = None
+    #: What the session is doing now, in a few words. See `titling`.
+    live_title: str | None = None
     cwd: str | None = None
     git_branch: str | None = None
     model: str | None = None
     last_prompt: str | None = None
+    #: The latest few prompts, oldest first. What a live title is written from.
+    recent_prompts: tuple[str, ...] = ()
     last_assistant: str | None = None
     last_thought: str | None = None
     permission_mode: str | None = None
@@ -210,44 +217,42 @@ class Agent:
         return name if count >= PLAN_MENTIONS_NEEDED else None
 
     def _lead(self) -> str | None:
-        """The few words in front of the branch saying what this session is about.
+        """The few words saying what this session is about.
 
-        The plan first. A session title describes how the conversation *opened*, which an hour
-        later is routinely not the job any more, whereas the plan being worked through stays
-        true all day.
+        The live title first, because it is the only one that keeps up with the work. Claude
+        Code's own title describes how the conversation opened, which is still better than a
+        plan inferred from how often a filename comes up.
         """
-        return plan_topic(self.plan) or self.title
+        return self.live_title or self.title or plan_topic(self.plan)
 
     def display_name(self) -> str:
         """What to call this agent everywhere in the UI: what it is doing, and where.
 
-        The branch is the anchor because it is the one thing that is always accurate. On its
-        own it is not enough - three sessions on `main` would read alike - so where there is
-        something to say about the work, it goes in front.
+        The branch goes after the topic when it says something about the work. A default
+        branch does not - most sessions sit on one - so it is left off rather than making
+        every other name end in `- main`.
         """
         lead = self._lead()
+        branch = self.git_branch if self.git_branch not in DEFAULT_BRANCHES else None
+        if lead:
+            return f"{lead} - {branch}" if branch else lead
         if self.git_branch:
             # With nothing to lead on, the repo at least tells two branches of the same name
             # in different checkouts apart.
-            return f"{lead} - {self.git_branch}" if lead else f"{self.repo} / {self.git_branch}"
-        return self.repo or lead or f"{self.source} {self.session_id[:8]}"
+            return f"{self.repo} / {self.git_branch}"
+        return self.repo or f"{self.source} {self.session_id[:8]}"
 
     def subtitle(self) -> str | None:
-        """The line under the name: what this particular session is about."""
+        """The line under the name: the detail the name had no room for."""
         if self.plan:
             return f"{self.plan}.md"
-        # Where there is no plan the title has already led the name, and printing it a second
-        # time tells you nothing, so the line goes to the next most useful thing.
-        if self.title and self.title != self._lead_used():
-            return self.title
+        lead = self._lead()
         gist = prompt_gist(self.last_prompt)
-        if gist:
+        if gist and gist != lead:
             return gist
+        if self.title and self.title != lead:
+            return self.title
         return f"{self.agent_type} subagent" if self.agent_type else None
-
-    def _lead_used(self) -> str | None:
-        """The lead as it actually reached the name, which is nothing without a branch."""
-        return self._lead() if self.git_branch else None
 
     def state_age_s(self, now: datetime) -> float:
         return max(0.0, (now - self.state_since).total_seconds())
@@ -265,6 +270,7 @@ class Agent:
             "name": self.display_name(),
             "subtitle": self.subtitle(),
             "title": self.title,
+            "liveTitle": self.live_title,
             "cwd": self.cwd,
             "repo": self.repo,
             "gitBranch": self.git_branch,
@@ -332,6 +338,12 @@ _SCAFFOLDING = re.compile(r"^\s*(?:</?[\w-]+\s*/?>|@\S+)\s*$")
 #: How often a plan must come up before it counts as the plan being followed. Observed on real
 #: sessions: the plan in hand lands 20-60 mentions, one named in passing lands two or three.
 PLAN_MENTIONS_NEEDED = 5
+
+#: Branches that say nothing about the work, because nearly every session starts on one.
+DEFAULT_BRANCHES = frozenset({"main", "master", "develop", "trunk", "HEAD"})
+
+#: How many of the latest prompts an agent remembers for its live title.
+RECENT_PROMPTS = 5
 
 #: Words whose capitalisation cannot be guessed from a kebab-case filename. Anything missing
 #: here just comes out lower case, which is survivable - add to it as names come up.

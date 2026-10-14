@@ -1,9 +1,10 @@
 """What an agent is called, and the plan it is working through.
 
-A session title describes how the conversation opened; an hour later it is often wrong about
-what the agent is doing. The branch is always right about that but says nothing about why. So
-the name is both: a topic, then the branch. The topic comes from the plan file the session has
-been working through where there is one, because that is the thing that stays true all day.
+The name has to say what the session is doing *now*. Claude Code's own title is written once,
+from the opening of the conversation, and an hour later it is often wrong; a third of sessions
+never get one at all. So the name leads with a live title regenerated from the latest prompts,
+falls back to that opening title and then to the plan being followed, and only names the
+branch when the branch says something - `main` does not.
 """
 
 from __future__ import annotations
@@ -33,40 +34,60 @@ def agent(**fields) -> Agent:
 
 
 class TestWhatAnAgentIsCalled:
-    def test_the_plan_it_is_following_leads_the_branch(self):
+    def test_the_live_title_leads(self):
+        named = agent(
+            git_branch="feat/ci", live_title="GitHub CI setup", title="Repo move", plan_mentions=(("0067-x", 9),)
+        )
+        assert named.display_name() == "GitHub CI setup - feat/ci"
+
+    def test_the_session_title_leads_until_there_is_a_live_one(self):
+        named = agent(git_branch="feature/blabla-graphql-abc", title="Lint check and push")
+        assert named.display_name() == "Lint check and push - feature/blabla-graphql-abc"
+
+    def test_the_title_wins_over_the_plan(self):
+        """A plan named often enough is a guess about the job; the title was written about it."""
+        named = agent(
+            git_branch="feat/x", title="Lint check and push", plan_mentions=(("0074-remote-oauth-reader", 9),)
+        )
+        assert named.display_name() == "Lint check and push - feat/x"
+
+    def test_the_plan_leads_when_there_is_no_title(self):
         named = agent(git_branch="feature/blabla-graphql-abc", plan_mentions=(("0067-graphql-schema-migration", 9),))
         assert named.display_name() == "GraphQL schema migration - feature/blabla-graphql-abc"
 
-    def test_the_session_title_leads_when_there_is_no_plan(self):
-        named = agent(git_branch="main", title="Lint check and push")
-        assert named.display_name() == "Lint check and push - main"
+    @pytest.mark.parametrize("branch", ["main", "master", "develop", "HEAD"])
+    def test_a_default_branch_is_left_off(self, branch):
+        """Every other session is on `main`. Saying so tells two of them apart no better."""
+        assert agent(git_branch=branch, live_title="GitHub CI setup").display_name() == "GitHub CI setup"
 
-    def test_the_plan_wins_over_the_title(self):
-        """The title is the last thing discussed; the plan is the job. Prefer the job."""
-        named = agent(git_branch="main", title="Lint check and push", plan_mentions=(("0074-remote-oauth-reader", 9),))
-        assert named.display_name() == "Remote OAuth reader - main"
-
-    def test_a_branch_with_nothing_to_say_about_it_keeps_the_repo(self):
+    def test_with_nothing_to_lead_on_the_repo_and_branch_name_it(self):
         """Falling back to a bare `main` would make three sessions in one repo identical."""
         assert agent(git_branch="main").display_name() == "acme-platform / main"
 
-    def test_without_a_branch_there_is_nothing_to_prefix(self):
-        assert agent(title="Lint check and push").display_name() == "acme-platform"
+    def test_without_a_branch_the_title_still_leads(self):
+        assert agent(title="Lint check and push").display_name() == "Lint check and push"
+
+    def test_without_a_branch_or_a_title_the_repo_names_it(self):
+        assert agent().display_name() == "acme-platform"
 
 
 class TestTheSubtitle:
     def test_the_plan_file_is_the_subtitle_when_there_is_one(self):
-        named = agent(git_branch="main", plan_mentions=(("0067-graphql-schema-migration", 9),))
+        named = agent(
+            git_branch="main", live_title="Schema work", plan_mentions=(("0067-graphql-schema-migration", 9),)
+        )
         assert named.subtitle() == "0067-graphql-schema-migration.md"
 
-    def test_the_title_is_not_printed_twice(self):
-        """With no plan the title leads the name, so repeating it underneath says nothing."""
-        named = agent(git_branch="main", title="Lint check and push", last_prompt="now push it")
-        assert named.display_name() == "Lint check and push - main"
+    def test_otherwise_the_latest_prompt(self):
+        named = agent(git_branch="main", live_title="Push it", title="Lint check and push", last_prompt="now push it")
         assert named.subtitle() == "now push it"
 
-    def test_the_title_still_shows_when_the_name_did_not_use_it(self):
-        assert agent(title="Lint check and push").subtitle() == "Lint check and push"
+    def test_the_title_is_not_printed_twice(self):
+        """With nothing newer the title leads the name, so repeating it underneath says nothing."""
+        assert agent(git_branch="main", title="Lint check and push").subtitle() is None
+
+    def test_the_opening_title_shows_once_a_live_one_has_taken_the_name(self):
+        assert agent(live_title="Push it", title="Lint check and push").subtitle() == "Lint check and push"
 
 
 class TestReadingAPlanName:
@@ -90,6 +111,24 @@ class TestSpottingThePlanBeingFollowed:
     def line(self, text: str) -> str:
         return json.dumps({"type": "user", "sessionId": "s", "message": {"role": "user", "content": text}}) + "\n"
 
+    def said(self, text: str) -> str:
+        content = [{"type": "text", "text": text}]
+        return (
+            json.dumps({"type": "assistant", "sessionId": "s", "message": {"role": "assistant", "content": content}})
+            + "\n"
+        )
+
+    def tool_call(self, **tool_input) -> str:
+        content = [{"type": "tool_use", "id": "t1", "name": "Read", "input": tool_input}]
+        return (
+            json.dumps({"type": "assistant", "sessionId": "s", "message": {"role": "assistant", "content": content}})
+            + "\n"
+        )
+
+    def tool_output(self, text: str) -> str:
+        content = [{"type": "tool_result", "tool_use_id": "t1", "content": text}]
+        return json.dumps({"type": "user", "sessionId": "s", "message": {"role": "user", "content": content}}) + "\n"
+
     def plans_in(self, tmp_path, *lines: str) -> list[str]:
         path = tmp_path / "s.jsonl"
         path.write_text("".join(lines))
@@ -99,9 +138,19 @@ class TestSpottingThePlanBeingFollowed:
         found = self.plans_in(
             tmp_path,
             self.line("open ~/workspace/dotfiles/plans/0067-graphql.md"),
-            self.line("step 3 of plans/0067-graphql.md is done"),
+            self.said("step 3 of plans/0067-graphql.md is done"),
+            self.tool_call(file_path="/home/u/workspace/dotfiles/plans/0067-graphql.md"),
         )
-        assert found == ["0067-graphql", "0067-graphql"]
+        assert found == ["0067-graphql", "0067-graphql", "0067-graphql"]
+
+    def test_text_the_agent_merely_read_is_not_a_mention(self, tmp_path):
+        """A code comment or a grep hit that names a plan says nothing about this session's job.
+
+        Reading this very module five times once named a session after the example in its
+        docstring.
+        """
+        found = self.plans_in(tmp_path, *[self.tool_output("#: so that `~/w/plans/0067-x.md` and")] * 9)
+        assert found == []
 
     def test_the_path_in_front_of_the_filename_does_not_matter(self, tmp_path):
         """The same plan gets referred to by absolute path, by `~` and bare. It is one plan."""
