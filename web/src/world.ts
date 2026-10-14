@@ -27,6 +27,7 @@ import {
 } from "./props";
 import { floorTexture, type FloorKind } from "./textures";
 import { ALLEY_Z, GATE_W, LINKS, NODES, PATH_W } from "./paths";
+import { fitFrustum } from "./view";
 import {
   bedPosition,
   BENCH_SEATS,
@@ -141,18 +142,20 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   const resize = () => {
     const w = canvas.clientWidth || window.innerWidth;
     const h = canvas.clientHeight || window.innerHeight;
-    const aspect = w / h;
-    // Fit the whole village, whatever the window shape. Hardcoding a zoom only ever frames one
-    // viewport correctly, and the village then hangs off the edge on every other.
-    viewHalfH = Math.max(bounds.halfH, bounds.halfW / aspect) * zoomScale;
-    camera.left = -viewHalfH * aspect;
-    camera.right = viewHalfH * aspect;
-    camera.top = viewHalfH;
-    camera.bottom = -viewHalfH;
+    // Fit the whole village, whatever the window shape, above the bar along the bottom.
+    // Hardcoding a zoom only ever frames one viewport correctly, and the village then hangs
+    // off the edge on every other.
+    const frustum = fitFrustum(bounds, w, h, reservedBelow(), zoomScale);
+    Object.assign(camera, frustum);
+    viewHalfH = (frustum.top - frustum.bottom) / 2;
     camera.updateProjectionMatrix();
     camera.position.copy(home).add(pan);
     renderer.setSize(w, h, false);
   };
+
+  // The bar changes height with the window width as its contents wrap.
+  const bottomBar = document.getElementById("bottom");
+  if (bottomBar) new ResizeObserver(() => resize()).observe(bottomBar);
 
   canvas.addEventListener(
     "wheel",
@@ -244,6 +247,13 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
  * (-1,2,-1)/sqrt(6). Projecting the zone corners through those two vectors gives the exact
  * rectangle to frame - including wall tops, which stick well above the floor plan.
  */
+/** Canvas pixels at the bottom covered by the bar there, plus a little air above it. */
+function reservedBelow(): number {
+  const bar = document.getElementById("bottom");
+  if (!bar) return 0;
+  return Math.max(0, window.innerHeight - bar.getBoundingClientRect().top) + 8;
+}
+
 function contentBounds(): { halfW: number; halfH: number; target: Vec2 } {
   const sx = (x: number, z: number) => (x - z) / Math.SQRT2;
   const sy = (x: number, y: number, z: number) => (-x + 2 * y - z) / Math.sqrt(6);
