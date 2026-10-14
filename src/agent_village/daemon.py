@@ -13,11 +13,12 @@ from pathlib import Path
 
 from .control import ControlConfig, Refused, send_prompt, stop, why_not_promptable, why_not_stoppable
 from .identity import appearance
-from .models import Agent, AgentState, Source, VillageEvent, World, utcnow
+from .models import Agent, AgentState, EventKind, Source, VillageEvent, World, utcnow
 from .reaper import ReaperConfig, dead_sessions
 from .reducer import ReducerConfig, apply, tick
 from .spool import DEFAULT_SPOOL, SpoolReader
 from .store import DEFAULT_DB, HistoryStore
+from .titling import Titler, TitlerConfig
 from .transcript import (
     read_claude_enrichment,
     recent_claude_transcripts,
@@ -49,12 +50,14 @@ class VillageConfig:
     reducer: ReducerConfig = field(default_factory=ReducerConfig)
     reaper: ReaperConfig = field(default_factory=ReaperConfig)
     control: ControlConfig = field(default_factory=ControlConfig)
+    titler: TitlerConfig = field(default_factory=TitlerConfig)
     enable_history: bool = True
 
 
 class Village:
-    def __init__(self, config: VillageConfig | None = None) -> None:
+    def __init__(self, config: VillageConfig | None = None, titler: Titler | None = None) -> None:
         self.config = config or VillageConfig()
+        self.titler = titler or Titler(self.config.titler)
         self.world = World()
         self.spool = SpoolReader(self.config.spool_dir)
         self.store = HistoryStore(self.config.db_path) if self.config.enable_history else None
@@ -125,6 +128,7 @@ class Village:
 
         events = self.spool.drain()
         events.extend(self._fresh_enrichment(now))
+        events.extend(self._live_titles(now))
         for event in events:
             self.world = apply(self.world, event, self.config.reducer)
         if events and self.store:
@@ -140,7 +144,21 @@ class Village:
 
         self._sync_states()
         self._retire_departed(now)
+        self.titler.start_due(self.world.agents.values(), now)
         return self.world is not before or bool(events)
+
+    def _live_titles(self, now: datetime) -> list[VillageEvent]:
+        """Titles the model has finished writing since the last poll, as events."""
+        out = []
+        for session_id, title in self.titler.collect(now):
+            agent = self.world.agents.get(session_id)
+            if agent is not None:
+                out.append(
+                    VillageEvent(
+                        source=agent.source, session_id=session_id, kind=EventKind.LIVE_TITLE, ts=now, title=title
+                    )
+                )
+        return out
 
     def _fresh_enrichment(self, now: datetime) -> list[VillageEvent]:
         """Keep reading transcripts after the daemon has started.
@@ -180,6 +198,7 @@ class Village:
                 self.world = self.world.without_agent(session_id)
                 self._known_states.pop(session_id, None)
                 self._narratives.pop(session_id, None)
+                self.titler.forget(session_id)
 
     def _sync_states(self, record: bool = True) -> None:
         for session_id, agent in self.world.agents.items():

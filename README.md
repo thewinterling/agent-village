@@ -122,6 +122,17 @@ The daemon's core is a pure reducer, `(World, VillageEvent) -> World`, plus a `t
 for time-based transitions. Both are side-effect free, which is why the state machine can be
 tested without a running agent, a socket, or a clock.
 
+### Live titles
+
+Claude Code titles a session once, from how it opened, so a long session's title goes stale
+within the hour, and a third of sessions never get one. While a session is active, the daemon
+asks Haiku for a 3-6 word title from its latest five prompts whenever a new one arrives, at most
+once every three minutes per session. The call goes through the `claude` CLI in print mode, with
+hooks, tools and settings files off and nothing saved, so it never shows up as an agent of its
+own. The name is that live title, then Claude Code's own title, then the plan being followed,
+with the branch after it unless it is `main` or another default branch. `villaged
+--no-live-titles` turns it off; without the `claude` CLI on `PATH` it does nothing.
+
 ### Known gap: Cursor cannot report "waiting"
 
 Cursor has no permission-prompt event, and every "before" hook that would reveal one is a
@@ -138,6 +149,7 @@ inferred one gets `?`.
 | `src/agent_village/reducer.py`  | The state machine. Pure.                                   |
 | `src/agent_village/transcript.py` | Backfill and enrichment (titles, token counts, MR links). |
 | `src/agent_village/daemon.py`   | Spool tailer, reaper, snapshot.                            |
+| `src/agent_village/titling.py` | Live session titles from Haiku, off the poll loop.         |
 | `src/agent_village/control.py`  | Stop and dismiss, plus the request guard on the write endpoints. |
 | `src/agent_village/server.py`   | FastAPI, WebSocket fan-out, `/table` debug view.           |
 | `web/src/zones.ts`              | Zone geometry and slot assignment. No three.js, so testable. |

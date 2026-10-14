@@ -119,6 +119,30 @@ def read_claude_enrichment(
 _PLAN_REFERENCE = re.compile(r"plans/([\w.-]+)\.md")
 
 
+def _said_or_done(rec: dict) -> Iterator[str]:
+    """The parts of a transcript record the session itself produced: prompts, replies, tool calls.
+
+    Tool *output* is left out. A file the agent read or a search it ran names whatever plans
+    happen to be in it, and none of those says what this session is working on.
+    """
+    message = rec.get("message")
+    if rec.get("type") not in ("user", "assistant") or not isinstance(message, dict):
+        return
+    content = message.get("content")
+    if isinstance(content, str):
+        yield content
+        return
+    if not isinstance(content, list):
+        return
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text" and isinstance(block.get("text"), str):
+            yield block["text"]
+        elif block.get("type") == "tool_use":
+            yield json.dumps(block.get("input"))
+
+
 def _enrichment_events(lines: Iterable[str], session_id: str, fallback: datetime) -> Iterator[VillageEvent]:
     """The record types hooks cannot supply: `ai-title`, `pr-link`, per-message usage, plans."""
     cwd: str | None = None
@@ -149,8 +173,9 @@ def _enrichment_events(lines: Iterable[str], session_id: str, fallback: datetime
             "raw_event_name": f"transcript:{rec.get('type')}",
         }
 
-        for plan in _PLAN_REFERENCE.findall(raw):
-            yield VillageEvent(kind=EventKind.PLAN, file_path=plan, **base)
+        for text in _said_or_done(rec):
+            for plan in _PLAN_REFERENCE.findall(text):
+                yield VillageEvent(kind=EventKind.PLAN, file_path=plan, **base)
 
         match rec.get("type"):
             case "ai-title":

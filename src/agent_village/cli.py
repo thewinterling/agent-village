@@ -13,6 +13,7 @@ from .daemon import VillageConfig
 from .server import create_app
 from .spool import DEFAULT_SPOOL
 from .store import DEFAULT_DB
+from .titling import TitlerConfig
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -25,6 +26,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
     parser.add_argument("--backfill-hours", type=float, default=12.0)
     parser.add_argument("--no-history", action="store_true", help="run without the SQLite log")
+    parser.add_argument(
+        "--no-live-titles",
+        action="store_true",
+        help="do not ask Haiku (via the claude CLI) to keep each session's title current",
+    )
     parser.add_argument("--log-level", default="info")
     args = parser.parse_args(argv)
 
@@ -38,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
         db_path=args.db,
         backfill_within=timedelta(hours=args.backfill_hours),
         enable_history=not args.no_history,
+        titler=TitlerConfig(enabled=not args.no_live_titles),
     )
     app = create_app(config)
 

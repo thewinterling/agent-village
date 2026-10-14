@@ -274,12 +274,13 @@ class TestContextAccumulation:
         world = play(claude_line("UserPromptSubmit", at(0), prompt="make the thing faster"))
         assert only(world).subtitle() == "make the thing faster"
 
-    def test_the_subtitle_prefers_a_generated_title_over_the_prompt(self):
+    def test_a_generated_title_names_the_agent_and_the_prompt_goes_underneath(self):
         world = play(
             claude_line("UserPromptSubmit", at(0), prompt="make the thing faster"),
             claude_line("SessionStart", at(1), session_title="Speed up the exporter"),
         )
-        assert only(world).subtitle() == "Speed up the exporter"
+        assert only(world).display_name() == "Speed up the exporter"
+        assert only(world).subtitle() == "make the thing faster"
 
     def test_the_subtitle_skips_wrappers_and_attachments_to_find_the_request(self):
         """`<task-notification>` and a row of @file paths are not what the agent was asked."""
