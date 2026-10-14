@@ -55,6 +55,9 @@ export interface Appearance {
   girth: number;
   gaitPhase: number;
   accessory: string;
+  skin: string;
+  hairStyle: string;
+  trousers: string;
 }
 
 export interface Agent {
