@@ -145,9 +145,19 @@ inferred one gets `?`.
 ## Tests
 
 ```bash
-.venv/bin/pytest          # 149 tests
-cd web && npx vitest run  # 38 tests
+.venv/bin/pytest          # 258 tests
+cd web && npx vitest run  # 98 tests
 ```
+
+CI (`.github/workflows/ci.yml`) runs both suites plus the web build, the pre-commit hooks
+(ruff, whitespace, YAML/TOML/JSON syntax) and commitlint over a PR's commits. Run the same
+hooks locally on every commit:
+
+```bash
+pre-commit install --hook-type pre-commit --hook-type commit-msg
+```
+
+Commit messages are `type: subject` with `type` one of `doc`, `patch`, `fix`, `feat`, `breaking`.
 
 Zone layout is tested twice: once for world-space distance and once for *screen*-space distance.
 Under an isometric camera two avatars offset by `(+d, +d)` sit on the camera's view axis and

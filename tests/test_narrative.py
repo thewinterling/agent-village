@@ -24,9 +24,7 @@ SESSION = "sess-claude"
 
 
 def ask(text: str, *, seconds: float = 0, **extra) -> str:
-    return json.dumps(
-        {"type": "user", "timestamp": at(seconds).isoformat(), "message": {"content": text}, **extra}
-    )
+    return json.dumps({"type": "user", "timestamp": at(seconds).isoformat(), "message": {"content": text}, **extra})
 
 
 def said(text: str, **extra) -> str:
@@ -34,9 +32,7 @@ def said(text: str, **extra) -> str:
 
 
 def tool(name: str = "Read") -> str:
-    return json.dumps(
-        {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name, "input": {}}]}}
-    )
+    return json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": name, "input": {}}]}})
 
 
 @pytest.fixture
@@ -231,9 +227,7 @@ class TestCursorSessions:
         monkeypatch.setattr(tx, "CURSOR_PROJECTS", projects)
 
         def write(*records: dict):
-            folder.joinpath("conv-cursor.jsonl").write_text(
-                "\n".join(json.dumps(r) for r in records) + "\n"
-            )
+            folder.joinpath("conv-cursor.jsonl").write_text("\n".join(json.dumps(r) for r in records) + "\n")
 
         return write
 
