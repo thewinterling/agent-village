@@ -18,7 +18,7 @@
 import { PARK_PATH_HALF_W, ZONES, type Vec2, type ZoneId } from "./zones";
 
 /** The main road, threaded through the gap between workshop/cafe and library/infirmary. */
-export const SPINE_Z = 3.3;
+export const SPINE_Z = 4;
 /** Width of the paving. Also the width of the gap cut in a fence where a gate meets it. */
 export const PATH_W = 1.4;
 export const GATE_W = 2.4;
@@ -45,14 +45,14 @@ export const GATES: Record<ZoneId, Vec2> = {
 /**
  * The alley between the workshop and the cafe, and the doors at either end of it.
  *
- * Those two rooms face each other across nine units of grass, and working -> done is by far
+ * Those two rooms face each other across eleven units of grass, and working -> done is by far
  * the most common move an agent makes. Sent round the spine it is most of the length of the
  * village for a trip you can see across, so each room gets a second door onto the gap.
  *
  * A side door is only ever a shortcut. Every zone still meets the spine through its own gate,
  * which is the way in from everywhere else.
  */
-export const ALLEY_Z = -4;
+export const ALLEY_Z = -4.8;
 
 const east = (id: ZoneId) => ZONES[id].centre.x + ZONES[id].half.x;
 const west = (id: ZoneId) => ZONES[id].centre.x - ZONES[id].half.x;

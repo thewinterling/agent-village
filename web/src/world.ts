@@ -102,7 +102,7 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.0008;
   sun.shadow.normalBias = 0.02;
-  const d = 45;
+  const d = 54;
   Object.assign(sun.shadow.camera, { left: -d, right: d, top: d, bottom: -d, near: 1, far: 160 });
   scene.add(sun);
 

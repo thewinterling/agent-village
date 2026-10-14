@@ -125,6 +125,11 @@ describe("the hotel", () => {
     expect(HOTEL_BEDS).toBeGreaterThanOrEqual(WORKSHOP_DESKS);
   });
 
+  it("has a bed for a busy day's worth of finished sessions", () => {
+    // Fifteen sleepers by mid-morning was a normal day, and that filled every bed.
+    expect(HOTEL_BEDS).toBeGreaterThanOrEqual(24);
+  });
+
   it("puts every bed inside the room with space to walk round it", () => {
     const zone = ZONES.hotel;
     for (let i = 0; i < HOTEL_BEDS; i++) {
@@ -150,6 +155,9 @@ describe("the hotel", () => {
     const beds = Array.from({ length: HOTEL_BEDS }, (_, i) => bedPosition(ZONES.hotel, i));
     for (let i = HOTEL_BEDS; i < HOTEL_BEDS + 8; i++) {
       const slot = slotPosition("hotel", i, HOTEL_BEDS + 8);
+      const zone = ZONES.hotel;
+      expect(Math.abs(slot.x - zone.centre.x), `overflow ${i} is outside the hotel`).toBeLessThan(zone.half.x);
+      expect(Math.abs(slot.z - zone.centre.z), `overflow ${i} is outside the hotel`).toBeLessThan(zone.half.z);
       for (const bed of beds) {
         expect(Math.hypot(slot.x - bed.x, slot.z - bed.z), `overflow ${i} is standing on a bed`)
           .toBeGreaterThan(1.3);
