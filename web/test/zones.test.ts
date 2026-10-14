@@ -66,6 +66,7 @@ function agent(overrides: Partial<Agent> & { sessionId: string }): Agent {
     needsAttention: false,
     appearance: {
       body: "#fff", hair: "#000", hat: "none", height: 1, girth: 1, gaitPhase: 0, accessory: "none",
+      skin: "#eec4a2", hairStyle: "short", trousers: "#37405a",
     },
     ...overrides,
   };

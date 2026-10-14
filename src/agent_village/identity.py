@@ -22,9 +22,15 @@ BODY_COLOURS = [
     "#9aa5b1",
 ]
 
-HAIR_COLOURS = ["#2b1d14", "#5a3a22", "#9c6b3f", "#d9b382", "#e8e4df", "#45506b", "#8c3b3b"]
+HAIR_COLOURS = ["#2b1d14", "#5a3a22", "#9c6b3f", "#e0b45a", "#e8e4df", "#45506b", "#8c3b3b"]
 
-HAT_SHAPES = ["none", "cap", "beanie", "band", "tuft"]
+HAT_SHAPES = ["none", "none", "none", "cap", "beanie", "band", "tuft"]
+
+SKIN_TONES = ["#f6dcc8", "#eec4a2", "#d9a77e", "#b9825a", "#8d5b3c", "#5f3c28"]
+
+HAIR_STYLES = ["short", "buzz", "long", "bun", "ponytail", "curly"]
+
+TROUSER_COLOURS = ["#37405a", "#2b2d33", "#5a4a3a", "#3f5a4a", "#6b6f7a", "#1f3350", "#7a5a48"]
 
 #: Model family -> accessory, so you can see at a glance which model is burning your quota.
 MODEL_ACCESSORY = {
@@ -36,7 +42,7 @@ MODEL_ACCESSORY = {
     "gemini": "halo",
 }
 
-_HASH_FIELDS = 6
+_HASH_FIELDS = 9
 
 
 def _digest(session_id: str) -> list[int]:
@@ -65,4 +71,7 @@ def appearance(session_id: str, model: str | None = None) -> dict[str, Any]:
         "girth": round(0.85 + (h[4] % 30) / 100, 2),
         "gaitPhase": round((h[5] % 100) / 100, 2),
         "accessory": model_accessory(model),
+        "skin": SKIN_TONES[h[6] % len(SKIN_TONES)],
+        "hairStyle": HAIR_STYLES[h[7] % len(HAIR_STYLES)],
+        "trousers": TROUSER_COLOURS[h[8] % len(TROUSER_COLOURS)],
     }

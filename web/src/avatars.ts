@@ -29,7 +29,7 @@ export interface Avatar {
   bubble: THREE.Sprite;
   marker: THREE.Mesh;
   body: THREE.Mesh;
-  head: THREE.Mesh;
+  head: THREE.Group;
   tool: THREE.Mesh;
   /** Joint groups, rotated about their pivot to swing. */
   limbs: { armL: THREE.Group; armR: THREE.Group; legL: THREE.Group; legR: THREE.Group };
@@ -74,6 +74,69 @@ function limb(
   return joint;
 }
 
+/** Eyes, brows, nose, mouth and ears, placed on the front (+z) of a head of radius `r`. */
+function addFace(head: THREE.Group, r: number, s: number, skin: THREE.Color, hairMat: THREE.Material): void {
+  const white = new THREE.MeshStandardMaterial({ color: 0xf7f4ef, roughness: 0.4 });
+  const iris = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.3 });
+  const shade = new THREE.MeshStandardMaterial({ color: skin.clone().multiplyScalar(0.85), roughness: 0.8 });
+  const lips = new THREE.MeshStandardMaterial({ color: 0x9a4f4a, roughness: 0.6 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.05 * s, 10, 8), white);
+    eye.scale.set(1, 0.8, 0.5);
+    eye.position.set(side * 0.085 * s, 0.03 * s, r * 0.9);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.028 * s, 8, 6), iris);
+    pupil.position.set(side * 0.085 * s, 0.03 * s, r * 0.9 + 0.02 * s);
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.09 * s, 0.02 * s, 0.02 * s), hairMat);
+    brow.position.set(side * 0.085 * s, 0.1 * s, r * 0.93);
+    brow.rotation.z = side * -0.12;
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.055 * s, 8, 6), shade);
+    ear.scale.x = 0.45;
+    ear.position.set(side * r * 0.98, 0, 0);
+    head.add(eye, pupil, brow, ear);
+  }
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.035 * s, 8, 6), shade);
+  nose.scale.set(0.9, 1.2, 1);
+  nose.position.set(0, -0.025 * s, r * 0.99);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.08 * s, 0.016 * s, 0.012 * s), lips);
+  mouth.position.set(0, -0.1 * s, r * 0.92);
+  head.add(nose, mouth);
+}
+
+/** A hair cap over the crown, plus whatever the style adds at the back. */
+function addHair(head: THREE.Group, style: string, r: number, mat: THREE.Material): void {
+  const part = (geometry: THREE.BufferGeometry, x: number, y: number, z: number): THREE.Mesh => {
+    const mesh = new THREE.Mesh(geometry, mat);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    head.add(mesh);
+    return mesh;
+  };
+  // Tipped back so it covers the back of the head more than the forehead.
+  const crown = style === "buzz" ? 0.42 : 0.56;
+  const cap = part(new THREE.SphereGeometry(r * 1.07, 18, 12, 0, Math.PI * 2, 0, Math.PI * crown), 0, r * 0.08, 0);
+  cap.rotation.x = -0.2;
+  cap.scale.y = 1.12;
+
+  switch (style) {
+    case "long":
+      // Wider than the head, so it frames the face from the front, not only from behind.
+      part(new THREE.CapsuleGeometry(r * 1.02, r * 1.2, 4, 14), 0, -r * 0.5, -r * 0.3).scale.z = 0.62;
+      break;
+    case "bun":
+      part(new THREE.SphereGeometry(r * 0.42, 12, 10), 0, r * 0.85, -r * 0.7);
+      break;
+    case "ponytail":
+      part(new THREE.CapsuleGeometry(r * 0.2, r * 1.2, 3, 8), 0, -r * 0.25, -r * 1.12).rotation.x = 0.35;
+      break;
+    case "curly":
+      for (let i = 0; i < 9; i++) {
+        const a = (i / 9) * Math.PI * 2;
+        part(new THREE.SphereGeometry(r * 0.32, 8, 6), Math.sin(a) * r * 0.78, r * 0.7, Math.cos(a) * r * 0.62 - r * 0.15);
+      }
+      break;
+  }
+}
+
 export function createAvatar(agent: Agent, at: Vec2): Avatar {
   const look = agent.appearance;
   const group = new THREE.Group();
@@ -81,47 +144,44 @@ export function createAvatar(agent: Agent, at: Vec2): Avatar {
 
   const scale = agent.isSubagent ? 0.68 : 1;
   const h = look.height * scale;
-  const skin = 0xe8c9a8;
-  const trousers = 0x37405a;
+  const s = scale;
+  const skin = new THREE.Color(look.skin);
+  const skinMat = new THREE.MeshStandardMaterial({ color: skin, roughness: 0.75 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: look.hair, roughness: 0.9 });
+  const trousersMat = new THREE.MeshStandardMaterial({ color: look.trousers, roughness: 0.85 });
 
+  // Torso flattened front to back: a round capsule reads as a barrel, not a chest.
   const body = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.3 * look.girth * scale, 0.52 * h, 4, 12),
+    new THREE.CapsuleGeometry(0.27 * look.girth * s, 0.4 * h, 4, 14),
     new THREE.MeshStandardMaterial({ color: look.body, roughness: 0.7 }),
   );
-  body.position.y = 0.95 * h;
+  body.position.y = 1.0 * h;
+  body.scale.z = 0.72;
   body.castShadow = true;
   group.add(body);
 
-  // Collar, so the head does not look screwed straight onto the torso.
-  const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12 * scale, 0.15 * scale, 0.12 * scale, 8),
-    new THREE.MeshStandardMaterial({ color: skin, roughness: 0.8 }),
-  );
-  neck.position.y = 1.3 * h;
+  // Hips in the trouser colour, so shirt and legs meet at a waist instead of a seam.
+  const pelvis = new THREE.Mesh(new THREE.CylinderGeometry(0.25 * look.girth * s, 0.23 * look.girth * s, 0.22 * h, 14), trousersMat);
+  pelvis.position.y = 0.68 * h;
+  pelvis.scale.z = 0.72;
+  pelvis.castShadow = true;
+  group.add(pelvis);
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09 * s, 0.11 * s, 0.14 * s, 10), skinMat);
+  neck.position.y = 1.32 * h;
   group.add(neck);
 
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28 * scale, 18, 14),
-    new THREE.MeshStandardMaterial({ color: skin, roughness: 0.8 }),
-  );
-  head.position.y = 1.52 * h;
-  head.castShadow = true;
+  // Face, hair and hat all hang off the head so they move with it.
+  const head = new THREE.Group();
+  head.position.y = 1.58 * h;
   group.add(head);
-
-  // Hair always, hat on top of it. A bare sphere reads as a mannequin.
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.29 * scale, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
-    new THREE.MeshStandardMaterial({ color: look.hair, roughness: 0.9 }),
-  );
-  hair.position.y = head.position.y + 0.02;
-  group.add(hair);
-
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222733, roughness: 0.5 });
-  for (const side of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.038 * scale, 8, 6), eyeMat);
-    eye.position.set(side * 0.1 * scale, head.position.y + 0.02, 0.255 * scale);
-    group.add(eye);
-  }
+  const R = 0.24 * s;
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(R, 20, 16), skinMat);
+  skull.scale.y = 1.12;
+  skull.castShadow = true;
+  head.add(skull);
+  addFace(head, R, s, skin, hairMat);
+  addHair(head, look.hairStyle, R, hairMat);
 
   if (look.hat !== "none") {
     const hat = new THREE.Mesh(
@@ -132,30 +192,38 @@ export function createAvatar(agent: Agent, at: Vec2): Avatar {
           : look.hat === "band"
             ? new THREE.TorusGeometry(0.29, 0.05, 6, 18)
             : new THREE.ConeGeometry(0.24, 0.36, 12),
-      new THREE.MeshStandardMaterial({ color: look.hair, roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({ color: look.body, roughness: 0.8 }),
     );
-    hat.position.y = head.position.y + 0.24 * scale;
-    hat.scale.setScalar(scale);
+    hat.position.y = R * 0.95;
+    hat.scale.setScalar(s * 0.88);
     if (look.hat === "band") hat.rotation.x = Math.PI / 2;
     hat.castShadow = true;
-    group.add(hat);
+    head.add(hat);
   }
 
   // Sleeves a shade darker than the torso. Same colour and the arms vanish into the body at
   // this zoom, which is what makes an avatar read as a capsule rather than a person.
   const sleeve = new THREE.Color(look.body).multiplyScalar(0.78);
-  const armL = limb(0.085 * scale, 0.44 * h, sleeve, -0.32 * look.girth * scale, SHOULDER_Y * h);
-  const armR = limb(0.085 * scale, 0.44 * h, sleeve, 0.32 * look.girth * scale, SHOULDER_Y * h);
-  const legL = limb(0.105 * scale, 0.46 * h, trousers, -0.13 * scale, HIP_Y * h);
-  const legR = limb(0.105 * scale, 0.46 * h, trousers, 0.13 * scale, HIP_Y * h);
+  const armL = limb(0.08 * s, 0.42 * h, sleeve, -0.32 * look.girth * s, SHOULDER_Y * h);
+  const armR = limb(0.08 * s, 0.42 * h, sleeve, 0.32 * look.girth * s, SHOULDER_Y * h);
+  const legL = limb(0.105 * s, 0.46 * h, trousersMat.color, -0.12 * s, HIP_Y * h);
+  const legR = limb(0.105 * s, 0.46 * h, trousersMat.color, 0.12 * s, HIP_Y * h);
   group.add(armL, armR, legL, legR);
+
+  for (const arm of [armL, armR]) {
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.075 * s, 10, 8), skinMat);
+    hand.position.y = -0.42 * h - 0.13 * s;
+    hand.castShadow = true;
+    arm.add(hand);
+  }
 
   for (const leg of [legL, legR]) {
     const shoe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.19 * scale, 0.1 * scale, 0.28 * scale),
-      new THREE.MeshStandardMaterial({ color: 0x242a36, roughness: 0.9 }),
+      new THREE.CapsuleGeometry(0.085 * s, 0.14 * s, 3, 8),
+      new THREE.MeshStandardMaterial({ color: 0x242a36, roughness: 0.6 }),
     );
-    shoe.position.set(0, -0.52 * h, 0.05 * scale);
+    shoe.rotation.x = Math.PI / 2;
+    shoe.position.set(0, -0.52 * h, 0.06 * s);
     shoe.castShadow = true;
     leg.add(shoe);
   }
