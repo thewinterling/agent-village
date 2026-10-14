@@ -35,10 +35,10 @@ describe("visibleBuckets", () => {
   });
 
   it("keeps the newest when there are more than fit", () => {
-    const shown = visibleBuckets(series(400), 100); // 100px holds 14 bars
-    expect(shown).toHaveLength(14);
+    const shown = visibleBuckets(series(400), 200); // 200px holds 16 bars
+    expect(shown).toHaveLength(16);
     expect(shown.at(-1)!.top!.sessionId, "the most recent minute must survive").toBe("sess-399");
-    expect(shown[0]!.top!.sessionId).toBe("sess-386");
+    expect(shown[0]!.top!.sessionId).toBe("sess-384");
   });
 
   it("scales with the available width", () => {

@@ -5,7 +5,7 @@ import { stateColourCss } from "./avatars";
 import { dismissAgent, promptAgent, stopAgent } from "./control";
 
 /** Bar geometry, kept in step with the `#scrubber i` rule in index.html. */
-const BAR_W = 5;
+const BAR_W = 10;
 const BAR_GAP = 2;
 /** A slice with any spend at all gets at least this, or a quiet minute looks like an idle one. */
 const MIN_BAR = 2;
@@ -15,9 +15,9 @@ export const spend = (bucket: UsageBucket): number => bucket.in + bucket.out;
 /**
  * The slice of the series the strip can actually show, oldest left, newest right.
  *
- * Takes them off the *newest* end. The bars are flex items that cannot shrink, so anything
- * that does not fit overflows past the right-hand edge and is clipped - and the right-hand
- * edge is "now", the only part of the series anybody is looking at.
+ * Takes them off the *newest* end: the right-hand edge is "now", the only part of the series
+ * anybody is looking at. The bars stretch to fill whatever slack the slot count leaves, and
+ * squeeze in a strip too narrow for the minimum of twelve.
  */
 export function visibleBuckets(buckets: UsageBucket[], widthPx: number): UsageBucket[] {
   const slots = Math.max(12, Math.floor((widthPx + BAR_GAP) / (BAR_W + BAR_GAP)));
