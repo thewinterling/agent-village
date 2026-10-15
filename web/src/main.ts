@@ -9,7 +9,8 @@ import { Chime } from "./sound";
 import type { Agent, AgentState, WorldSnapshot } from "./types";
 import { createStage } from "./world";
 import { ZoneInfo } from "./zoneinfo";
-import { layout } from "./zones";
+import { routeTo } from "./paths";
+import { layout, zoneFor, type Seat } from "./zones";
 
 const canvas = document.getElementById("stage") as HTMLCanvasElement;
 const stage = createStage(canvas);
@@ -21,6 +22,9 @@ stage.scene.add(plumbob);
 
 const avatars = new Map<string, Avatar>();
 const previousState = new Map<string, AgentState>();
+const seats = new Map<string, Seat>();
+/** New arrivals walk in through the front door rather than materialising mid-room. */
+const SPAWN = { x: 0, z: 19 };
 let latest: WorldSnapshot | null = null;
 
 const hud = new Hud(() => {
@@ -92,7 +96,12 @@ function pickAgent(): string | null {
 
 function onWorld(world: WorldSnapshot): void {
   latest = world;
-  const positions = layout(world.agents);
+  // Each arrival takes the free seat nearest the door its route comes in by.
+  const positions = layout(world.agents, seats, (agent) => {
+    const p = avatars.get(agent.sessionId)?.group.position ?? SPAWN;
+    const from = { x: p.x, z: p.z };
+    return routeTo(from, zoneFor(agent)).at(-1) ?? from;
+  });
   const seen = new Set<string>();
 
   for (const agent of world.agents) {
@@ -101,8 +110,7 @@ function onWorld(world: WorldSnapshot): void {
     let avatar = avatars.get(agent.sessionId);
 
     if (!avatar) {
-      // New arrivals walk in through the front door rather than materialising mid-room.
-      avatar = createAvatar(agent, { x: 0, z: 19 });
+      avatar = createAvatar(agent, SPAWN);
       avatars.set(agent.sessionId, avatar);
       stage.scene.add(avatar.group);
     }

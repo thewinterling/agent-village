@@ -449,17 +449,35 @@ describe("layout", () => {
     expect(after).toEqual(before);
   });
 
-  it("clusters workshop agents by repo", () => {
-    const agents = [
-      agent({ sessionId: "a1", repo: "alpha" }),
-      agent({ sessionId: "b1", repo: "beta" }),
-      agent({ sessionId: "a2", repo: "alpha" }),
-      agent({ sessionId: "b2", repo: "beta" }),
-    ];
-    const p = layout(agents);
-    const spanAlpha = Math.hypot(p.get("a1")!.x - p.get("a2")!.x, p.get("a1")!.z - p.get("a2")!.z);
-    const crossRepo = Math.hypot(p.get("a1")!.x - p.get("b2")!.x, p.get("a1")!.z - p.get("b2")!.z);
-    expect(spanAlpha).toBeLessThan(crossRepo);
+  it("seats an arrival at the free seat nearest the door it comes in by", () => {
+    const rooms = { workshop: WORKSHOP_DESKS, cafe: 24, hotel: HOTEL_BEDS, park: BENCH_SEATS * 2 };
+    for (const [zone, cap] of Object.entries(rooms) as [ZoneId, number][]) {
+      const door = { x: ZONES[zone].centre.x + 3, z: ZONES[zone].centre.z + ZONES[zone].half.z };
+      const away = (p: { x: number; z: number }) => Math.hypot(p.x - door.x, p.z - door.z);
+      const p = layout([agent({ sessionId: "a", state: statesIn(zone)[0]! })], new Map(), () => door).get("a")!;
+      const nearest = Math.min(...Array.from({ length: cap }, (_, i) => away(slotPosition(zone, i, cap))));
+      expect(away(p)).toBeCloseTo(nearest);
+    }
+  });
+
+  it("keeps everyone in their seat when somebody else arrives or leaves", () => {
+    const seats = new Map();
+    const a = agent({ sessionId: "m" });
+    const before = layout([a, agent({ sessionId: "z" })], seats).get("m");
+    const joined = layout([agent({ sessionId: "b" }), a, agent({ sessionId: "z" })], seats).get("m");
+    const left = layout([a], seats).get("m");
+    expect(joined).toEqual(before);
+    expect(left).toEqual(before);
+  });
+
+  it("gives a freed seat to the next arrival", () => {
+    const seats = new Map();
+    const door = () => ZONES.cafe.centre;
+    layout([agent({ sessionId: "a", state: "done" })], seats, door);
+    const first = seats.get("a");
+    layout([], seats, door);
+    layout([agent({ sessionId: "b", state: "done" })], seats, door);
+    expect(seats.get("b")).toEqual(first);
   });
 
   it("parks a subagent next to its parent rather than in its own slot", () => {
