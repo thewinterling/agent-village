@@ -52,8 +52,11 @@ const listShown = (): boolean => document.body.classList.contains("list");
 
 viewToggle.addEventListener("click", () => showList(!listShown()));
 listEl.addEventListener("click", (e) => {
-  const id = (e.target as HTMLElement).closest("tr")?.dataset.id;
-  if (id) void hud.openDrawer(id);
+  const target = e.target as HTMLElement;
+  const id = target.closest("tr")?.dataset.id;
+  if (!id) return;
+  const opened = hud.openDrawer(id);
+  if (target.closest("[data-rename]")) void opened.then(() => hud.startRename());
 });
 try {
   showList(localStorage.getItem("view") === "list");

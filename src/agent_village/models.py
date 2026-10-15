@@ -69,6 +69,8 @@ class EventKind(StrEnum):
     #: A title regenerated from the latest prompts. Kept apart from `TITLE`, which is the one
     #: Claude Code wrote at the start of the session and stays the fallback.
     LIVE_TITLE = "live_title"
+    #: A name the user gave the session from the UI. Logged so it survives a restart.
+    RENAME = "rename"
     PR_LINK = "pr_link"
     #: One mention of a plan file. Emitted per mention rather than once per plan, because
     #: which plan is *being followed* is a question of how often it comes up.
@@ -161,6 +163,8 @@ class Agent:
     title: str | None = None
     #: What the session is doing now, in a few words. See `titling`.
     live_title: str | None = None
+    #: A name the user gave it. Beats every generated title, branch suffix included.
+    custom_title: str | None = None
     cwd: str | None = None
     git_branch: str | None = None
     model: str | None = None
@@ -232,6 +236,8 @@ class Agent:
         branch does not - most sessions sit on one - so it is left off rather than making
         every other name end in `- main`.
         """
+        if self.custom_title:
+            return self.custom_title
         lead = self._lead()
         branch = self.git_branch if self.git_branch not in DEFAULT_BRANCHES else None
         if lead:
@@ -271,6 +277,7 @@ class Agent:
             "subtitle": self.subtitle(),
             "title": self.title,
             "liveTitle": self.live_title,
+            "customTitle": self.custom_title,
             "cwd": self.cwd,
             "repo": self.repo,
             "gitBranch": self.git_branch,

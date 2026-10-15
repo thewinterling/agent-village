@@ -102,6 +102,11 @@ class HistoryStore:
             )
         self._conn.commit()
 
+    def custom_titles(self) -> dict[str, str]:
+        """The latest name given to each renamed session. Empty means it was reset."""
+        rows = self._conn.execute("SELECT session_id, detail FROM events WHERE kind = 'rename' ORDER BY id")
+        return {row["session_id"]: row["detail"] or "" for row in rows}
+
     def record_transition(self, agent: Agent, previous: AgentState | None) -> None:
         with closing(self._conn.cursor()) as cur:
             cur.execute(

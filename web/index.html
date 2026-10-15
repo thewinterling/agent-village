@@ -167,6 +167,13 @@
       #list tbody tr { cursor: pointer; }
       #list tbody tr:hover, #list tr.sel { background: #1b2029; }
       #list > p { padding: 12px; }
+      .rename { cursor: pointer; background: none; border: none; color: var(--dim); font-size: 13px;
+        padding: 0 4px; margin-left: 4px; vertical-align: baseline; }
+      .rename:hover, .rename:focus-visible { color: var(--fg); }
+      #list .rename { opacity: 0; }
+      #list tr:hover .rename, #list .rename:focus-visible { opacity: 1; }
+      #rename-input { width: 100%; font: inherit; color: var(--fg); background: #1b2029;
+        border: 1px solid #3f6ea8; border-radius: 6px; padding: 3px 7px; }
     </style>
   </head>
   <body>
