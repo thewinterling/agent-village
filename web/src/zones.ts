@@ -382,44 +382,109 @@ export function toScreen(p: Vec2): Vec2 {
   return { x: (p.x - p.z) * Math.SQRT1_2, z: (p.x + p.z) / Math.sqrt(6) };
 }
 
+/** Which seat an agent has taken, remembered between snapshots by the caller. */
+export interface Seat {
+  zone: ZoneId;
+  index: number;
+}
+
+/**
+ * Fixed seats per arrangement. Agents keep their seat while they stay in the zone, so these
+ * must not depend on how many others are in the room. A doorway is somewhere to pass through,
+ * so it has none and keeps the old spread-by-count behaviour.
+ */
+const SEATS: Partial<Record<Zone["arrangement"], number>> = {
+  desks: WORKSHOP_DESKS,
+  beds: HOTEL_BEDS,
+  table: 24, // six tables of four, as furnished in world.ts
+  bench: BENCH_SEATS * 2,
+  grid: 16,
+};
+
 /**
  * Assign every agent a position.
  *
- * Within the workshop, agents are grouped by repo so one project's agents cluster together -
- * the "repo buildings" idea from the plan, done with grouping rather than literal walls so it
- * degrades gracefully when you have one repo or twenty.
+ * An agent arriving in a zone takes the free seat nearest to `entry(agent)` - the door it
+ * walks in through - and keeps it until it leaves. `seats` is that memory, updated in place.
  */
-export function layout(agents: Agent[]): Map<string, Slot> {
+export function layout(
+  agents: Agent[],
+  seats = new Map<string, Seat>(),
+  entry: (agent: Agent) => Vec2 = (agent) => ZONES[zoneFor(agent)].centre,
+): Map<string, Slot> {
   const byZone = new Map<ZoneId, Agent[]>();
-  for (const agent of agents) {
+  const subagents: Agent[] = [];
+  for (const agent of stableSort(agents)) {
+    // Subagents stand just behind their parent rather than taking a slot of their own.
+    if (agent.parentSessionId && agents.some((a) => a.sessionId === agent.parentSessionId)) {
+      subagents.push(agent);
+      continue;
+    }
     const zone = zoneFor(agent);
     const list = byZone.get(zone) ?? [];
     list.push(agent);
     byZone.set(zone, list);
   }
 
+  const live = new Set(agents.map((a) => a.sessionId));
+  for (const id of seats.keys()) if (!live.has(id)) seats.delete(id);
+
   const out = new Map<string, Slot>();
   for (const [zoneId, list] of byZone) {
-    const ordered = zoneId === "workshop" ? groupByRepo(list) : stableSort(list);
-    ordered.forEach((agent, i) => {
-      const base = slotPosition(zoneId, i, ordered.length);
-      // Subagents stand just behind their parent rather than taking a slot of their own.
-      const parent = agent.parentSessionId ? out.get(agent.parentSessionId) : undefined;
-      out.set(agent.sessionId, parent ? { x: parent.x + 1.1, z: parent.z + 1.1 } : base);
-    });
+    const cap = SEATS[ZONES[zoneId].arrangement];
+    if (cap === undefined) {
+      list.forEach((agent, i) => out.set(agent.sessionId, slotPosition(zoneId, i, list.length)));
+      continue;
+    }
+
+    const taken = new Set<number>();
+    const newcomers: Agent[] = [];
+    for (const agent of list) {
+      const seat = seats.get(agent.sessionId);
+      if (seat?.zone === zoneId && seat.index < cap) taken.add(seat.index);
+      else newcomers.push(agent);
+    }
+
+    const overflow: Agent[] = [];
+    for (const agent of newcomers) {
+      const from = entry(agent);
+      let best = -1;
+      let bestD = Infinity;
+      for (let i = 0; i < cap; i++) {
+        if (taken.has(i)) continue;
+        const p = slotPosition(zoneId, i, cap);
+        const d = Math.hypot(p.x - from.x, p.z - from.z);
+        if (d < bestD) [best, bestD] = [i, d];
+      }
+      if (best < 0) {
+        overflow.push(agent);
+        seats.delete(agent.sessionId);
+        continue;
+      }
+      taken.add(best);
+      seats.set(agent.sessionId, { zone: zoneId, index: best });
+    }
+
+    for (const agent of list) {
+      const seat = seats.get(agent.sessionId);
+      if (seat) out.set(agent.sessionId, slotPosition(zoneId, seat.index, cap));
+    }
+    // A full room: the rest stand in the overflow, which does shift as people come and go.
+    overflow.forEach((agent, i) =>
+      out.set(agent.sessionId, slotPosition(zoneId, cap + i, cap + overflow.length)),
+    );
+  }
+
+  for (const agent of subagents) {
+    seats.delete(agent.sessionId);
+    const parent = out.get(agent.parentSessionId!) ?? slotPosition(zoneFor(agent), 0, 1);
+    out.set(agent.sessionId, { x: parent.x + 1.1, z: parent.z + 1.1 });
   }
   return out;
 }
 
 function stableSort(agents: Agent[]): Agent[] {
   return [...agents].sort((a, b) => a.sessionId.localeCompare(b.sessionId));
-}
-
-function groupByRepo(agents: Agent[]): Agent[] {
-  return [...agents].sort(
-    (a, b) =>
-      (a.repo ?? "~").localeCompare(b.repo ?? "~") || a.sessionId.localeCompare(b.sessionId),
-  );
 }
 
 /** Colour per state, shared by the avatar tint, the HUD pills and the table. */
