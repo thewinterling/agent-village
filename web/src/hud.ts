@@ -66,7 +66,10 @@ export function hoverPosition(
   };
 }
 
-const esc = (v: unknown): string =>
+/** Most urgent first. Shared by the counters and the list view. */
+export const STATE_ORDER = ["waiting", "blocked", "working", "thinking", "compacting", "done", "sleeping"] as const;
+
+export const esc = (v: unknown): string =>
   String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 export const dur = (s: number): string =>
@@ -357,8 +360,7 @@ export class Hud {
   }
 
   updateChrome(world: WorldSnapshot): void {
-    const order = ["waiting", "blocked", "working", "thinking", "compacting", "done", "sleeping"] as const;
-    this.counts.innerHTML = order
+    this.counts.innerHTML = STATE_ORDER
       .filter((s) => world.counts[s])
       .map(
         (s) =>
