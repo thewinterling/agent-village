@@ -4,6 +4,7 @@ import * as THREE from "three";
 
 import { createAvatar, createPlumbob, stepAvatar, updateAvatar, type Avatar } from "./avatars";
 import { Hud } from "./hud";
+import { renderList } from "./list";
 import { connect } from "./net";
 import { Chime } from "./sound";
 import type { Agent, AgentState, WorldSnapshot } from "./types";
@@ -30,6 +31,35 @@ let latest: WorldSnapshot | null = null;
 const hud = new Hud(() => {
   plumbob.visible = false;
 });
+
+// -- list view ------------------------------------------------------------------------
+
+const listEl = document.getElementById("list")!;
+const viewToggle = document.getElementById("view-toggle")!;
+
+function showList(on: boolean): void {
+  document.body.classList.toggle("list", on);
+  viewToggle.textContent = on ? "village view" : "list view";
+  try {
+    localStorage.setItem("view", on ? "list" : "village");
+  } catch {
+    // Private windows can refuse storage; the choice just will not survive a reload.
+  }
+  if (on && latest) renderList(listEl, latest.agents, hud.selected);
+}
+
+const listShown = (): boolean => document.body.classList.contains("list");
+
+viewToggle.addEventListener("click", () => showList(!listShown()));
+listEl.addEventListener("click", (e) => {
+  const id = (e.target as HTMLElement).closest("tr")?.dataset.id;
+  if (id) void hud.openDrawer(id);
+});
+try {
+  showList(localStorage.getItem("view") === "list");
+} catch {
+  showList(false);
+}
 
 // -- input ----------------------------------------------------------------------------
 
@@ -134,6 +164,7 @@ function onWorld(world: WorldSnapshot): void {
   }
 
   hud.updateChrome(world);
+  if (listShown()) renderList(listEl, world.agents, hud.selected);
 }
 
 connect(onWorld, (live) => {
@@ -151,6 +182,8 @@ const clock = new THREE.Clock();
 
 function frame(): void {
   requestAnimationFrame(frame);
+  // Nothing to draw while the list covers the village. Avatars catch up on the way back.
+  if (listShown()) return;
   const dt = Math.min(clock.getDelta(), 0.1);
   const elapsed = clock.getElapsedTime();
 

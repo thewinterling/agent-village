@@ -150,6 +150,23 @@
       .act-note { margin-top: 8px; font-size: 11px; line-height: 1.45; }
       .session-id { font-size: 11px; margin-top: 22px; overflow-wrap: anywhere; }
       a { color: #8fc4ff; }
+
+      /* list view, swapped in for the canvas */
+      #view-toggle { cursor: pointer; padding: 4px 10px; border-radius: 999px; font: inherit; font-size: 12px;
+        background: var(--panel); border: 1px solid var(--line); color: var(--dim); }
+      #view-toggle:hover { color: var(--fg); }
+      #list { display: none; position: fixed; inset: 96px 14px 110px; overflow: auto; padding: 4px 0; }
+      body.list #list { display: block; }
+      body.list #stage, body.list #zone-layer, body.list #reset-view { display: none; }
+      #list table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      #list th { position: sticky; top: 0; background: #14171f; text-align: left; font-weight: 600;
+        color: var(--dim); padding: 7px 12px; border-bottom: 1px solid var(--line); }
+      #list td { padding: 7px 12px; border-bottom: 1px solid #1b1f29; vertical-align: top;
+        overflow-wrap: anywhere; }
+      #list td i { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+      #list tbody tr { cursor: pointer; }
+      #list tbody tr:hover, #list tr.sel { background: #1b2029; }
+      #list > p { padding: 12px; }
     </style>
   </head>
   <body>
@@ -164,6 +181,7 @@
     </div>
 
     <div id="topright">
+      <button id="view-toggle" title="switch between the village and a plain list">list view</button>
       <div id="reset-view" title="back to the default framing">reset view</div>
       <div id="sound-toggle">sound off</div>
       <div id="status" class="panel" style="padding: 4px 10px">connecting&hellip;</div>
@@ -177,6 +195,8 @@
         <span class="tl-cap">now</span>
       </div>
     </div>
+
+    <div id="list" class="panel"></div>
 
     <div id="hover"></div>
 
