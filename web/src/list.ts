@@ -33,6 +33,7 @@ export function renderList(el: HTMLElement, agents: Agent[], selected: string | 
             <td style="color:${colour}"><i style="background:${colour}"></i>${esc(a.state)}${a.waitingInferred ? "?" : ""}
               <span class="dim">${dur(a.stateAgeS)}</span></td>
             <td>${a.isSubagent ? '<span class="dim">&#8627; </span>' : ""}${esc(a.name)}
+              <button class="rename" data-rename title="rename">&#9998;</button>
               ${a.subtitle ? `<div class="dim">${esc(a.subtitle)}</div>` : ""}</td>
             <td>${esc(a.repo ?? "")}${a.gitBranch ? `<div class="dim">${esc(a.gitBranch)}</div>` : ""}</td>
             <td>${esc(tool ?? "")}</td>

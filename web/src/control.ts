@@ -43,3 +43,8 @@ export async function dismissAgent(sessionId: string): Promise<void> {
 export async function promptAgent(sessionId: string, text: string): Promise<void> {
   await post(`/api/agents/${encodeURIComponent(sessionId)}/prompt`, { text });
 }
+
+/** Give the session a name of your own. An empty name goes back to the generated one. */
+export async function renameAgent(sessionId: string, title: string): Promise<void> {
+  await post(`/api/agents/${encodeURIComponent(sessionId)}/rename`, { title });
+}

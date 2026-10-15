@@ -2,7 +2,7 @@
 
 import type { Agent, AgentDetail, UsageBucket, UsageSeries, WorldSnapshot } from "./types";
 import { stateColourCss } from "./avatars";
-import { dismissAgent, promptAgent, stopAgent } from "./control";
+import { dismissAgent, promptAgent, renameAgent, stopAgent } from "./control";
 
 /** Bar geometry, kept in step with the `#scrubber i` rule in index.html. */
 const BAR_W = 10;
@@ -171,7 +171,7 @@ export class Hud {
     const a: AgentDetail = await response.json();
 
     body.innerHTML = `
-      <h2>${esc(a.name)}</h2>
+      <h2 id="drawer-name"><span>${esc(a.name)}</span><button class="rename" id="rename" title="rename">&#9998;</button></h2>
       ${a.subtitle ? `<div class="drawer-sub">${esc(a.subtitle)}</div>` : ""}
       <div class="chips">
         <span class="chip" style="border-color:${stateColourCss(a.state)};color:${stateColourCss(a.state)}">
@@ -264,9 +264,47 @@ export class Hud {
       (e.target as HTMLButtonElement).textContent = "copied";
     });
 
+    document.getElementById("rename")?.addEventListener("click", () => this.startRename());
     this.wirePrompt(a);
     this.wireAction("act-stop", a, "stop this agent?", () => stopAgent(a.sessionId), "signal sent");
     this.wireAction("act-dismiss", a, "remove from view?", () => dismissAgent(a.sessionId), "dismissed");
+  }
+
+  /**
+   * Swap the drawer's heading for a text box. Enter saves, Escape or leaving it cancels, and
+   * saving an empty name hands the session back to its generated title.
+   */
+  startRename(): void {
+    const heading = document.getElementById("drawer-name");
+    const id = this.selected;
+    if (!heading || !id || heading.querySelector("input")) return;
+    const current = heading.querySelector("span")?.textContent ?? "";
+    heading.innerHTML = `<input id="rename-input" maxlength="120" value="${esc(current)}"
+      aria-label="session name" placeholder="empty for the generated name" />`;
+    const input = heading.querySelector("input")!;
+    input.focus();
+    input.select();
+
+    let done = false;
+    const finish = async (save: boolean): Promise<void> => {
+      if (done) return;
+      done = true;
+      try {
+        if (save) await renameAgent(id, input.value);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        heading.innerHTML = `<span>${esc(current)}</span> <span class="dim act-note">${esc(reason)}</span>`;
+        return;
+      }
+      if (this.selected === id) void this.openDrawer(id);
+    };
+    input.addEventListener("keydown", (e) => {
+      // Escape would otherwise also reach the document listener and close the whole drawer.
+      e.stopPropagation();
+      if (e.key === "Enter") void finish(true);
+      if (e.key === "Escape") void finish(false);
+    });
+    input.addEventListener("blur", () => void finish(false));
   }
 
   /**

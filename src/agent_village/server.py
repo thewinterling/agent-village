@@ -154,6 +154,22 @@ def create_app(config: VillageConfig | None = None, *, max_fps: float = 10.0) ->
         await hub.broadcast({"type": "world", **village.snapshot()})
         return JSONResponse({"ok": True, "dismissed": session_id})
 
+    @app.post("/api/agents/{session_id}/rename")
+    async def rename_agent(session_id: str, request: Request) -> JSONResponse:
+        try:
+            guard(request)
+            body = await request.json()
+            title = body.get("title") if isinstance(body, dict) else None
+            if not isinstance(title, str):
+                return JSONResponse({"error": "Expected a JSON body with a title."}, status_code=400)
+            village.rename_agent(session_id, title)
+        except Refused as refused:
+            return JSONResponse({"error": refused.reason}, status_code=refused.status)
+        except ValueError:
+            return JSONResponse({"error": "Expected a JSON body."}, status_code=400)
+        await hub.broadcast({"type": "world", **village.snapshot()})
+        return JSONResponse({"ok": True, "renamed": session_id})
+
     @app.get("/api/history")
     async def history(limit: int = 500) -> JSONResponse:
         if not village.store:

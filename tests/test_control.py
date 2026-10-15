@@ -1,4 +1,4 @@
-"""Stopping and dismissing agents.
+"""Stopping, dismissing and renaming agents.
 
 Two things are being pinned down here. First, that the village refuses to signal anything it
 cannot positively identify as a Claude CLI process - a Cursor pid is the editor, and a recycled
@@ -174,6 +174,49 @@ class TestDismiss:
         assert caught.value.status == 404
 
 
+def village_with_one(tmp_path, *, history: bool = False) -> Village:
+    village = Village(
+        VillageConfig(spool_dir=tmp_path / "spool", enable_history=history, db_path=tmp_path / "history.sqlite3")
+    )
+    (tmp_path / "spool").mkdir(exist_ok=True)
+    (tmp_path / "spool" / "0001.json").write_text(claude_line("Stop", at(0), pid=None))
+    village.poll_once(at(1))
+    return village
+
+
+class TestRename:
+    def test_a_given_name_replaces_the_generated_one(self, tmp_path):
+        village = village_with_one(tmp_path)
+        village.rename_agent("sess-claude", "  the   flaky test hunt ")
+        assert village.world.agents["sess-claude"].display_name() == "the flaky test hunt"
+
+    def test_an_empty_name_goes_back_to_the_generated_one(self, tmp_path):
+        village = village_with_one(tmp_path)
+        generated = village.world.agents["sess-claude"].display_name()
+        village.rename_agent("sess-claude", "mine")
+        village.rename_agent("sess-claude", "   ")
+        assert village.world.agents["sess-claude"].display_name() == generated
+
+    def test_a_novel_is_refused(self, tmp_path):
+        village = village_with_one(tmp_path)
+        with pytest.raises(Refused) as caught:
+            village.rename_agent("sess-claude", "x" * 500)
+        assert caught.value.status == 400
+
+    def test_renaming_an_unknown_agent_is_refused(self, tmp_path):
+        village = Village(VillageConfig(spool_dir=tmp_path / "spool", enable_history=False))
+        with pytest.raises(Refused) as caught:
+            village.rename_agent("nobody", "x")
+        assert caught.value.status == 404
+
+    def test_the_name_survives_a_restart(self, tmp_path):
+        village_with_one(tmp_path, history=True).rename_agent("sess-claude", "kept")
+        (tmp_path / "spool" / "0001.json").unlink(missing_ok=True)
+        restarted = village_with_one(tmp_path, history=True)
+        restarted._restore_custom_titles()
+        assert restarted.world.agents["sess-claude"].display_name() == "kept"
+
+
 class TestEndpoints:
     @pytest.fixture
     def client(self, tmp_path):
@@ -236,3 +279,17 @@ def test_replace_keeps_an_agent_stoppable(tmp_path):
     config = fake_proc(tmp_path, 4242, "claude")
     agent = replace(an_agent(), state=AgentState.THINKING)
     assert why_not_stoppable(agent, config) is None
+
+    def test_rename_needs_a_title(self, client):
+        token = client.get("/api/session").json()["token"]
+        reply = client.post(
+            "/api/agents/whoever/rename",
+            content=json.dumps({"name": "wrong key"}),
+            headers={
+                "x-village-token": token,
+                "content-type": "application/json",
+                "origin": "http://127.0.0.1:8847",
+                "host": "127.0.0.1:8847",
+            },
+        )
+        assert reply.status_code == 400

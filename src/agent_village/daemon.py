@@ -32,6 +32,9 @@ from .transcript import (
 
 log = logging.getLogger(__name__)
 
+#: Long enough for a real name, short enough to fit over an avatar.
+MAX_CUSTOM_TITLE = 120
+
 
 @dataclass(frozen=True, slots=True)
 class VillageConfig:
@@ -96,10 +99,19 @@ class Village:
         events.sort(key=lambda e: e.ts)
         for event in events:
             self.world = apply(self.world, event, self.config.reducer)
+        self._restore_custom_titles()
         self._record_backfilled_usage(events)
         self._sync_states(record=False)
         log.info("backfilled %d agents from %d events", len(self.world.agents), len(events))
         return len(self.world.agents)
+
+    def _restore_custom_titles(self) -> None:
+        """Put back the names the user gave sessions before the restart."""
+        if self.store is None:
+            return
+        for session_id, title in self.store.custom_titles().items():
+            if agent := self.world.agents.get(session_id):
+                self.world = self.world.with_agent(replace(agent, custom_title=title or None))
 
     def _record_backfilled_usage(self, events: list[VillageEvent]) -> None:
         """Keep the usage strip's history across a restart, without doubling it.
@@ -327,3 +339,25 @@ class Village:
             replace(agent, state=AgentState.GONE, state_since=now or utcnow(), waiting_reason="dismissed")
         )
         self._sync_states()
+
+    def rename_agent(self, session_id: str, title: str, now: datetime | None = None) -> None:
+        """Give an agent a name of your own. An empty title goes back to the generated one."""
+        agent = self.world.agents.get(session_id)
+        if agent is None:
+            raise Refused("No such agent.", status=404)
+        title = " ".join(title.split())
+        if len(title) > MAX_CUSTOM_TITLE:
+            raise Refused(f"Keep the name under {MAX_CUSTOM_TITLE} characters.", status=400)
+        self.world = self.world.with_agent(replace(agent, custom_title=title or None))
+        if self.store:
+            self.store.record_events(
+                [
+                    VillageEvent(
+                        source=agent.source,
+                        session_id=session_id,
+                        kind=EventKind.RENAME,
+                        ts=now or utcnow(),
+                        text=title,
+                    )
+                ]
+            )
