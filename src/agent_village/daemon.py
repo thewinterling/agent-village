@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .control import ControlConfig, Refused, send_prompt, stop, why_not_promptable, why_not_stoppable
 from .identity import appearance
-from .models import Agent, AgentState, EventKind, Source, VillageEvent, World, utcnow
+from .models import MAX_CUSTOM_TITLE, Agent, AgentState, EventKind, Source, VillageEvent, World, utcnow
 from .reaper import ReaperConfig, dead_sessions
 from .reducer import ReducerConfig, apply, tick
 from .spool import DEFAULT_SPOOL, SpoolReader
@@ -31,9 +31,6 @@ from .transcript import (
 )
 
 log = logging.getLogger(__name__)
-
-#: Long enough for a real name, short enough to fit over an avatar.
-MAX_CUSTOM_TITLE = 120
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +68,8 @@ class Village:
         #: size and mtime so a growing file is re-read and a finished one is not.
         self._narratives: dict[str, tuple[tuple[int, float], list[dict]]] = {}
         self._last_enrich: datetime | None = None
+        #: The last name each session was given by `/rename` in Claude Code. See `_changed_names`.
+        self._claude_names: dict[str, str] = {}
 
     # -- lifecycle ---------------------------------------------------------------------
 
@@ -88,7 +87,7 @@ class Village:
             if summary and summary.session_id:
                 events.extend(summary_to_events(summary))
                 enriched, offset = read_claude_enrichment(path, 0)
-                events.extend(enriched)
+                events.extend(self._changed_names(enriched))
                 self._enrich_offsets[path] = offset
 
         for path in recent_cursor_transcripts(within):
@@ -196,7 +195,22 @@ class Village:
             offset = self._enrich_offsets.get(path, 0)
             events, new_offset = read_claude_enrichment(path, offset, fallback_ts=now)
             self._enrich_offsets[path] = new_offset
-            out.extend(events)
+            out.extend(self._changed_names(events))
+        return out
+
+    def _changed_names(self, events: list[VillageEvent]) -> list[VillageEvent]:
+        """Drop renames that only repeat the name Claude Code already gave.
+
+        Claude Code writes its `custom-title` record again every so often, not only on `/rename`.
+        Each copy would undo a rename made from the UI since, so only a new name gets through.
+        """
+        out = []
+        for event in events:
+            if event.kind is EventKind.RENAME:
+                if self._claude_names.get(event.session_id) == event.text:
+                    continue
+                self._claude_names[event.session_id] = event.text or ""
+            out.append(event)
         return out
 
     def _retire_departed(self, now: datetime) -> None:

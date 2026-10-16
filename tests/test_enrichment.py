@@ -28,6 +28,11 @@ def title(text: str) -> str:
     return record(type="ai-title", aiTitle=text)
 
 
+def renamed(text: str) -> str:
+    """What `/rename` writes. Claude Code leaves the timestamp off this one."""
+    return json.dumps({"type": "custom-title", "customTitle": text, "sessionId": "sess-claude"}) + "\n"
+
+
 def mr(number: int, repo: str = "acme/acme-platform") -> str:
     return record(
         type="pr-link",
@@ -140,6 +145,38 @@ class TestLiveMergeRequests:
         assert [p.number for p in links] == [2752]
         assert links[0].repo == "acme/acme-platform"
         assert village.detail("sess-claude")["prLinks"][0]["number"] == 2752
+
+    def test_a_rename_in_claude_code_names_the_agent(self, village):
+        village, transcripts = village
+        path = transcripts / "sess-claude.jsonl"
+        path.write_text(title("Rolling upload safety"))
+        village.poll_once(at(1))
+
+        with path.open("a") as handle:
+            handle.write(renamed("  upload   safety "))
+        village.poll_once(at(2))
+        assert village.world.agents["sess-claude"].display_name() == "upload safety"
+
+    def test_the_latest_rename_wins(self, village):
+        """Claude Code writes the record again on every rename, and the UI can rename too."""
+        village, transcripts = village
+        path = transcripts / "sess-claude.jsonl"
+        path.write_text(title("t") + renamed("first") + renamed("second"))
+        village.poll_once(at(1))
+        assert village.world.agents["sess-claude"].display_name() == "second"
+
+        village.rename_agent("sess-claude", "from the ui")
+        assert village.world.agents["sess-claude"].display_name() == "from the ui"
+
+        with path.open("a") as handle:
+            handle.write(renamed("second"))
+        village.poll_once(at(2))
+        assert village.world.agents["sess-claude"].display_name() == "from the ui", "a repeat is not a rename"
+
+        with path.open("a") as handle:
+            handle.write(renamed("third"))
+        village.poll_once(at(3))
+        assert village.world.agents["sess-claude"].display_name() == "third"
 
     def test_the_same_mr_is_not_listed_twice(self, village):
         """Claude writes a pr-link record on every push to the branch, not just the first."""
