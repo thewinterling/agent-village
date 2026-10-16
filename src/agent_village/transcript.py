@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from .models import EventKind, Source, VillageEvent, clip
+from .models import MAX_CUSTOM_TITLE, EventKind, Source, VillageEvent, clip
 
 CLAUDE_PROJECTS = Path.home() / ".claude" / "projects"
 CURSOR_PROJECTS = Path.home() / ".cursor" / "projects"
@@ -144,7 +144,7 @@ def _said_or_done(rec: dict) -> Iterator[str]:
 
 
 def _enrichment_events(lines: Iterable[str], session_id: str, fallback: datetime) -> Iterator[VillageEvent]:
-    """The record types hooks cannot supply: `ai-title`, `pr-link`, per-message usage, plans."""
+    """The record types hooks cannot supply: `ai-title`, `custom-title`, `pr-link`, usage, plans."""
     cwd: str | None = None
     branch: str | None = None
     model: str | None = None
@@ -182,6 +182,10 @@ def _enrichment_events(lines: Iterable[str], session_id: str, fallback: datetime
                 title = rec.get("aiTitle")
                 if title:
                     yield VillageEvent(kind=EventKind.TITLE, title=clip(title, 80), **base)
+            case "custom-title":
+                # Set by `/rename` in Claude Code. The same thing as a rename from the UI.
+                name = " ".join(str(rec.get("customTitle") or "").split())
+                yield VillageEvent(kind=EventKind.RENAME, text=clip(name, MAX_CUSTOM_TITLE), **base)
             case "pr-link":
                 url = rec.get("prUrl")
                 if url:

@@ -324,6 +324,9 @@ def apply(world: World, event: VillageEvent, config: ReducerConfig = DEFAULT_CON
         case EventKind.TITLE:
             agent = replace(agent, title=event.title or agent.title)
 
+        case EventKind.RENAME:
+            agent = replace(agent, custom_title=event.text or None)
+
         case EventKind.LIVE_TITLE:
             agent = replace(agent, live_title=event.title or agent.live_title)
 

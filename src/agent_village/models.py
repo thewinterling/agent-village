@@ -69,7 +69,8 @@ class EventKind(StrEnum):
     #: A title regenerated from the latest prompts. Kept apart from `TITLE`, which is the one
     #: Claude Code wrote at the start of the session and stays the fallback.
     LIVE_TITLE = "live_title"
-    #: A name the user gave the session from the UI. Logged so it survives a restart.
+    #: A name the user gave the session, from the UI or Claude Code's `/rename`. Logged so a
+    #: rename from the UI survives a restart.
     RENAME = "rename"
     PR_LINK = "pr_link"
     #: One mention of a plan file. Emitted per mention rather than once per plan, because
@@ -81,6 +82,10 @@ class EventKind(StrEnum):
     #: able to fill in a title or a last prompt without moving the avatar or counting a turn.
     CONTEXT = "context"
     HEARTBEAT = "heartbeat"
+
+
+#: Long enough for a real name, short enough to fit over an avatar.
+MAX_CUSTOM_TITLE = 120
 
 
 @dataclass(frozen=True, slots=True)
