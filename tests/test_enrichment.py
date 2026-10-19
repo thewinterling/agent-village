@@ -178,6 +178,19 @@ class TestLiveMergeRequests:
         village.poll_once(at(3))
         assert village.world.agents["sess-claude"].display_name() == "third"
 
+    def test_a_claude_code_name_survives_the_session_being_retired(self, village):
+        """The bug: retired over a weekend, back on Monday with its generated title."""
+        village, transcripts = village
+        path = transcripts / "sess-claude.jsonl"
+        path.write_text(title("t") + renamed("village"))
+        village.poll_once(at(1))
+        village.world = village.world.without_agent("sess-claude")  # what the reaper does
+
+        with path.open("a") as handle:
+            handle.write(title("t") + renamed("village"))
+        village.poll_once(at(2))
+        assert village.world.agents["sess-claude"].display_name() == "village"
+
     def test_the_same_mr_is_not_listed_twice(self, village):
         """Claude writes a pr-link record on every push to the branch, not just the first."""
         village, transcripts = village
