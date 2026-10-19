@@ -135,7 +135,6 @@ COLUMNS = (
     ("AGE", 7),
     ("NAME", 0),
     ("REPO", 22),
-    ("TOOL", 10),
     ("MODEL", 16),
     ("TOK", 7),
     ("SEEN", 12),
@@ -148,7 +147,6 @@ def column_widths(total: int) -> list[int]:
 
 
 def row_cells(agent: dict, now: datetime | None = None) -> list[str]:
-    tool = agent.get("currentTool") or next((t.get("name") for t in agent.get("openTools") or []), "") or ""
     state = agent.get("state", "") + ("?" if agent.get("waitingInferred") else "")
     name = ("↳ " if agent.get("isSubagent") else "") + (agent.get("name") or agent.get("sessionId", ""))
     repo = agent.get("repo") or ""
@@ -160,7 +158,6 @@ def row_cells(agent: dict, now: datetime | None = None) -> list[str]:
         dur(agent.get("stateAgeS") or 0),
         name,
         repo,
-        tool,
         agent.get("model") or "",
         tokens(int(agent.get("tokensIn") or 0) + int(agent.get("tokensOut") or 0)),
         ago(agent.get("lastEventAt"), now),
