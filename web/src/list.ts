@@ -23,7 +23,7 @@ export function renderList(el: HTMLElement, agents: Agent[], selected: string | 
   }
   el.innerHTML = `
     <table>
-      <thead><tr><th>state</th><th>agent</th><th>repo</th><th>tool</th><th>model</th><th>tokens</th><th>last seen</th></tr></thead>
+      <thead><tr><th>state</th><th>source</th><th>agent</th><th>repo</th><th>tool</th><th>model</th><th>tokens</th><th>last seen</th></tr></thead>
       <tbody>${listOrder(agents)
         .map((a) => {
           const colour = stateColourCss(a.state);
@@ -32,6 +32,7 @@ export function renderList(el: HTMLElement, agents: Agent[], selected: string | 
           <tr data-id="${esc(a.sessionId)}"${a.sessionId === selected ? ' class="sel"' : ""}>
             <td style="color:${colour}"><i style="background:${colour}"></i>${esc(a.state)}${a.waitingInferred ? "?" : ""}
               <span class="dim">${dur(a.stateAgeS)}</span></td>
+            <td>${esc(a.source)}</td>
             <td>${a.isSubagent ? '<span class="dim">&#8627; </span>' : ""}${esc(a.name)}
               <button class="rename" data-rename title="rename">&#9998;</button>
               ${a.subtitle ? `<div class="dim">${esc(a.subtitle)}</div>` : ""}</td>
