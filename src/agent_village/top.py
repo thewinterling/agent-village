@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import curses
 import json
+import math
 import textwrap
 import time
 import urllib.error
@@ -34,9 +35,13 @@ STATE_COLOUR = {
     "gone": 0x6A7183,
 }
 
-KEYS = "↑↓ select  enter details  p prompt  r rename  s stop  d dismiss  q quit"
+KEYS = "↑↓ select  enter details  space/b scroll details  p prompt  r rename  s stop  d dismiss  q quit"
 POLL_S = 1.0
 DETAIL_POLL_S = 3.0
+#: Same pace as the web strip; the series moves a minute at a time.
+USAGE_POLL_S = 15.0
+#: Rows the token chart gets, eight bar heights each.
+CHART_H = 2
 
 
 # -- talking to the daemon ------------------------------------------------------------------
@@ -115,6 +120,39 @@ def ago(iso: str | None, now: datetime | None = None) -> str:
         return ""
     seconds = ((now or datetime.now(UTC)) - datetime.fromisoformat(iso)).total_seconds()
     return "just now" if seconds < 1 else f"{dur(seconds)} ago"
+
+
+BLOCKS = " ▁▂▃▄▅▆▇█"
+
+
+def chart(buckets: list[dict], width: int, height: int = CHART_H) -> list[str]:
+    """Tokens per bucket as block-character bars, newest on the right, top row first.
+
+    Square root scale, like the web strip, so one compaction does not flatten everything else.
+    """
+    shown = buckets[-width:] if width > 0 else []
+    spent = [int(b.get("in") or 0) + int(b.get("out") or 0) for b in shown]
+    peak = max(spent, default=0)
+    levels = [0 if not t else max(1, round(math.sqrt(t / peak) * height * 8)) for t in spent]
+    return [
+        "".join(BLOCKS[min(8, max(0, level - row * 8))] for level in levels).rjust(width)
+        for row in reversed(range(height))
+    ]
+
+
+def usage_caption(usage: dict, width: int) -> str:
+    shown = (usage.get("buckets") or [])[-width:] if width > 0 else []
+    total = sum(int(b.get("in") or 0) + int(b.get("out") or 0) for b in shown)
+    if not total:
+        return "no token usage in the last few hours"
+    return f"{tokens(total)} tokens / {dur(len(shown) * int(usage.get('bucketS') or 60))}"
+
+
+def stats_line(stats: dict) -> str:
+    return (
+        f"{stats.get('turns', 0)} turns  {stats.get('toolCalls', 0)} tool calls  "
+        f"{stats.get('benchVisits', 0)} bench visits  {stats.get('failures', 0)} failures  today"
+    )
 
 
 def fit(text: str, width: int) -> str:
@@ -238,6 +276,8 @@ class Top:
         self.daemon = daemon
         self.agents: list[dict] = []
         self.counts: dict[str, int] = {}
+        self.stats: dict = {}
+        self.usage: dict = {}
         self.selected: str | None = None
         self.detail: dict | None = None
         self.detail_open = False
@@ -246,6 +286,7 @@ class Top:
         self.note = ""
         self._next_poll = 0.0
         self._next_detail = 0.0
+        self._next_usage = 0.0
         self._init_colours()
 
     def _init_colours(self) -> None:
@@ -273,12 +314,19 @@ class Top:
                 world = self.daemon.get("/api/world")
                 self.agents = order(world.get("agents") or [])
                 self.counts = world.get("counts") or {}
+                self.stats = world.get("stats") or {}
                 self.status = "live"
             except RuntimeError as error:
                 self.status = str(error)
             ids = [a["sessionId"] for a in self.agents]
             if self.selected not in ids:
                 self.selected = ids[0] if ids else None
+        if now >= self._next_usage:
+            self._next_usage = now + USAGE_POLL_S
+            try:
+                self.usage = self.daemon.get("/api/usage")
+            except RuntimeError:
+                pass  # keep the last series; the header already says the daemon is unreachable
         if self.detail_open and self.selected and (force or now >= self._next_detail):
             self._next_detail = now + DETAIL_POLL_S
             try:
@@ -301,14 +349,19 @@ class Top:
             return
 
         self._header(width)
-        list_h = height - 3
+        # The usage footer only once there is room for it next to a usable list.
+        foot_h = CHART_H + 3 if height >= 18 else 0
+        body_h = height - 2 - foot_h
+        list_h = body_h
         if self.detail_open:
-            list_h = max(5, (height - 3) * 2 // 5)
+            list_h = max(5, body_h * 2 // 5)
         self._box(1, 0, list_h, width, f" agents ({len(self.agents)}) ")
         self._table(2, 1, list_h - 2, width - 2)
         if self.detail_open:
-            self._box(1 + list_h, 0, height - 2 - list_h, width, " details ")
-            self._detail(2 + list_h, 2, height - 4 - list_h, width - 4)
+            self._box(1 + list_h, 0, body_h - list_h, width, " details ")
+            self._detail(2 + list_h, 2, body_h - list_h - 2, width - 4)
+        if foot_h:
+            self._footer(1 + body_h, width, foot_h)
         s.addstr(height - 1, 0, fit(self.note or KEYS, width - 1), self.colour.get("dim", 0))
         s.refresh()
 
@@ -329,6 +382,16 @@ class Top:
             fit(status, width - x - 1),
             self.colour["done" if live else "blocked"] if self.colour else 0,
         )
+
+    def _footer(self, y: int, width: int, h: int) -> None:
+        s = self.screen
+        inner = width - 4
+        self._box(y, 0, h, width, " usage ")
+        caption = usage_caption(self.usage, inner)[:inner]
+        s.addstr(y + 1, 2, fit(stats_line(self.stats), max(0, inner - len(caption) - 2)), self.colour.get("dim", 0))
+        s.addstr(y + 1, 2 + inner - len(caption), caption, self.colour.get("dim", 0))
+        for i, row in enumerate(chart(self.usage.get("buckets") or [], inner)):
+            s.addstr(y + 2 + i, 2, row, self.colour.get("frame", 0))
 
     def _box(self, y: int, x: int, h: int, w: int, title: str) -> None:
         # Drawn by hand: `border()` takes single-byte characters only, so no rounded corners.

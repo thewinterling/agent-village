@@ -9,7 +9,19 @@ from datetime import UTC, datetime
 import pytest
 
 from agent_village import top
-from agent_village.top import Daemon, column_widths, detail_lines, fit, format_row, order, row_cells, xterm256
+from agent_village.top import (
+    Daemon,
+    chart,
+    column_widths,
+    detail_lines,
+    fit,
+    format_row,
+    order,
+    row_cells,
+    stats_line,
+    usage_caption,
+    xterm256,
+)
 
 
 def agent(sid: str, state: str, age: float = 1, **extra) -> dict:
@@ -64,6 +76,28 @@ class TestRows:
             "1.5M",
             "10s ago",
         ]
+
+
+class TestUsage:
+    def test_the_chart_keeps_the_newest_buckets_on_the_right(self):
+        buckets = [{"in": 100, "out": 0}, {"in": 0, "out": 0}, {"in": 25, "out": 0}]
+        # A quarter of the peak is half the height on the square root scale: one full row of two.
+        assert chart(buckets, 5) == ["  █  ", "  █ █"]
+
+    def test_the_chart_drops_the_oldest_buckets_when_narrow(self):
+        assert chart([{"in": 1, "out": 0}, {"in": 0, "out": 0}], 1, 1) == [" "]
+
+    def test_a_quiet_stretch_says_so(self):
+        assert chart([{"in": 0, "out": 0}], 3) == ["   ", "   "]
+        assert usage_caption({"bucketS": 60, "buckets": [{"in": 0, "out": 0}]}, 10).startswith("no token usage")
+
+    def test_the_caption_sums_only_what_is_on_screen(self):
+        usage = {"bucketS": 60, "buckets": [{"in": 9_000_000, "out": 0}, {"in": 1000, "out": 500}]}
+        assert usage_caption(usage, 1) == "1.5k tokens / 1m00s"
+
+    def test_the_stats_match_the_web_strip(self):
+        stats = {"turns": 3, "toolCalls": 12, "benchVisits": 1, "failures": 0}
+        assert stats_line(stats) == "3 turns  12 tool calls  1 bench visits  0 failures  today"
 
 
 class TestDetail:
