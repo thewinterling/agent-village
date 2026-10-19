@@ -31,6 +31,19 @@ file paths out of your work repos.
 On first start it backfills recent sessions from the Claude and Cursor transcript files, so the
 village is populated before any hook has fired. `--backfill-hours 0` turns that off.
 
+### From the terminal
+
+`agent-top` is the same village as a btop-style list, for when a browser is one window too
+many. It talks to the running daemon, so it shows the same names and "what happened" summary
+and offers the same actions:
+
+```bash
+.venv/bin/agent-top           # --url if villaged is not on 127.0.0.1:8847
+```
+
+`↑↓`/`jk` select, `enter` toggles the details pane (`space`/`b` scroll it), `p` sends a prompt,
+`r` renames, `s` stops, `d` dismisses, `q` quits.
+
 ### Keeping it up
 
 A village that dies with the shell you started it from is not much of a village. Run it under
@@ -152,6 +165,7 @@ inferred one gets `?`.
 | `src/agent_village/titling.py` | Live session titles from Haiku, off the poll loop.         |
 | `src/agent_village/control.py`  | Stop and dismiss, plus the request guard on the write endpoints. |
 | `src/agent_village/server.py`   | FastAPI, WebSocket fan-out, `/table` debug view.           |
+| `src/agent_village/top.py`      | `agent-top`, the terminal view. A client of the daemon's API. |
 | `web/src/zones.ts`              | Zone geometry and slot assignment. No three.js, so testable. |
 
 ## Tests
