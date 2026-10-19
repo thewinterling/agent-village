@@ -209,6 +209,28 @@ class TestRename:
             village.rename_agent("nobody", "x")
         assert caught.value.status == 404
 
+    def test_a_session_that_comes_back_after_being_retired_keeps_its_name(self, tmp_path):
+        village = village_with_one(tmp_path)
+        village.rename_agent("sess-claude", "kept")
+        village.world = village.world.without_agent("sess-claude")  # what the reaper does
+
+        (tmp_path / "spool" / "0002.json").write_text(claude_line("Stop", at(5), pid=None))
+        village.poll_once(at(6))
+        assert village.world.agents["sess-claude"].display_name() == "kept"
+
+    def test_a_session_idle_through_a_restart_gets_its_name_back_when_it_wakes(self, tmp_path):
+        village_with_one(tmp_path, history=True).rename_agent("sess-claude", "kept")
+        (tmp_path / "spool" / "0001.json").unlink(missing_ok=True)
+        restarted = Village(
+            VillageConfig(spool_dir=tmp_path / "spool", enable_history=True, db_path=tmp_path / "history.sqlite3")
+        )
+        restarted._restore_custom_titles()  # backfill found nothing: the session was idle
+        assert "sess-claude" not in restarted.world.agents
+
+        (tmp_path / "spool" / "0002.json").write_text(claude_line("Stop", at(5), pid=None))
+        restarted.poll_once(at(6))
+        assert restarted.world.agents["sess-claude"].display_name() == "kept"
+
     def test_the_name_survives_a_restart(self, tmp_path):
         village_with_one(tmp_path, history=True).rename_agent("sess-claude", "kept")
         (tmp_path / "spool" / "0001.json").unlink(missing_ok=True)

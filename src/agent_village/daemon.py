@@ -70,6 +70,8 @@ class Village:
         self._last_enrich: datetime | None = None
         #: The last name each session was given by `/rename` in Claude Code. See `_changed_names`.
         self._claude_names: dict[str, str] = {}
+        #: Every session's custom title, kept after the agent itself is retired. See `_keep_custom_titles`.
+        self._custom_titles: dict[str, str] = {}
 
     # -- lifecycle ---------------------------------------------------------------------
 
@@ -105,12 +107,32 @@ class Village:
         return len(self.world.agents)
 
     def _restore_custom_titles(self) -> None:
-        """Put back the names the user gave sessions before the restart."""
+        """Put back the names the user gave sessions before the restart.
+
+        All of them, not only the sessions backfill found: one that was idle for longer than
+        the backfill window gets its name back when it wakes up, via `_keep_custom_titles`.
+        """
         if self.store is None:
             return
-        for session_id, title in self.store.custom_titles().items():
+        self._custom_titles = self.store.custom_titles()
+        for session_id, title in self._custom_titles.items():
             if agent := self.world.agents.get(session_id):
                 self.world = self.world.with_agent(replace(agent, custom_title=title or None))
+
+    def _keep_custom_titles(self, before: World) -> None:
+        """Remember each session's custom title, and give it back to a session that returns.
+
+        The reaper retires a session that has gone quiet, and its next hook event creates it
+        afresh with no custom title. Claude Code's `custom-title` record cannot put it back
+        either: `_changed_names` drops it as a repeat.
+        """
+        for session_id, agent in list(self.world.agents.items()):
+            old = before.agents.get(session_id)
+            if old is None and agent.custom_title is None:
+                if title := self._custom_titles.get(session_id):
+                    self.world = self.world.with_agent(replace(agent, custom_title=title))
+            elif old is None or old.custom_title != agent.custom_title:
+                self._custom_titles[session_id] = agent.custom_title or ""
 
     def _record_backfilled_usage(self, events: list[VillageEvent]) -> None:
         """Keep the usage strip's history across a restart, without doubling it.
@@ -144,6 +166,7 @@ class Village:
             self.world = apply(self.world, event, self.config.reducer)
         if events and self.store:
             self.store.record_events(events)
+        self._keep_custom_titles(before)
 
         self.world = tick(self.world, now, self.config.reducer)
 
@@ -363,6 +386,7 @@ class Village:
         if len(title) > MAX_CUSTOM_TITLE:
             raise Refused(f"Keep the name under {MAX_CUSTOM_TITLE} characters.", status=400)
         self.world = self.world.with_agent(replace(agent, custom_title=title or None))
+        self._custom_titles[session_id] = title
         if self.store:
             self.store.record_events(
                 [
