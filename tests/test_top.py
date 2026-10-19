@@ -43,6 +43,7 @@ class TestRows:
                 "a",
                 "waiting",
                 75,
+                source="cursor",
                 waitingInferred=True,
                 repo="village",
                 gitBranch="main",
@@ -54,7 +55,17 @@ class TestRows:
             ),
             now,
         )
-        assert cells == ["waiting?", "1m15s", "a", "village:main", "Bash", "claude-opus-5-5", "1.5M", "10s ago"]
+        assert cells == [
+            "waiting?",
+            "cursor",
+            "1m15s",
+            "a",
+            "village:main",
+            "Bash",
+            "claude-opus-5-5",
+            "1.5M",
+            "10s ago",
+        ]
 
 
 class TestDetail:

@@ -129,7 +129,17 @@ def fit(text: str, width: int) -> str:
 
 
 #: (header, width) per column. Width 0 means "whatever is left", and only the name gets that.
-COLUMNS = (("STATE", 11), ("AGE", 7), ("NAME", 0), ("REPO", 22), ("TOOL", 10), ("MODEL", 16), ("TOK", 7), ("SEEN", 12))
+COLUMNS = (
+    ("STATE", 11),
+    ("SRC", 6),
+    ("AGE", 7),
+    ("NAME", 0),
+    ("REPO", 22),
+    ("TOOL", 10),
+    ("MODEL", 16),
+    ("TOK", 7),
+    ("SEEN", 12),
+)
 
 
 def column_widths(total: int) -> list[int]:
@@ -146,6 +156,7 @@ def row_cells(agent: dict, now: datetime | None = None) -> list[str]:
         repo = f"{repo}:{agent['gitBranch']}" if repo else agent["gitBranch"]
     return [
         state,
+        agent.get("source") or "",
         dur(agent.get("stateAgeS") or 0),
         name,
         repo,
