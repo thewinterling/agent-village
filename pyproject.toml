@@ -25,6 +25,7 @@ dev = [
 [project.scripts]
 villaged = "agent_village.cli:main"
 village-install-hooks = "agent_village.hookinstall:main"
+agent-top = "agent_village.top:main"
 
 [tool.uv]
 package = true
