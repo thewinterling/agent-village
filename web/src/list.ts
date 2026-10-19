@@ -23,11 +23,10 @@ export function renderList(el: HTMLElement, agents: Agent[], selected: string | 
   }
   el.innerHTML = `
     <table>
-      <thead><tr><th>state</th><th>source</th><th>agent</th><th>repo</th><th>tool</th><th>model</th><th>tokens</th><th>last seen</th></tr></thead>
+      <thead><tr><th>state</th><th>source</th><th>agent</th><th>repo</th><th>model</th><th>tokens</th><th>last seen</th></tr></thead>
       <tbody>${listOrder(agents)
         .map((a) => {
           const colour = stateColourCss(a.state);
-          const tool = a.currentTool ?? a.openTools[0]?.name;
           return `
           <tr data-id="${esc(a.sessionId)}"${a.sessionId === selected ? ' class="sel"' : ""}>
             <td style="color:${colour}"><i style="background:${colour}"></i>${esc(a.state)}${a.waitingInferred ? "?" : ""}
@@ -37,7 +36,6 @@ export function renderList(el: HTMLElement, agents: Agent[], selected: string | 
               <button class="rename" data-rename title="rename">&#9998;</button>
               ${a.subtitle ? `<div class="dim">${esc(a.subtitle)}</div>` : ""}</td>
             <td>${esc(a.repo ?? "")}${a.gitBranch ? `<div class="dim">${esc(a.gitBranch)}</div>` : ""}</td>
-            <td>${esc(tool ?? "")}</td>
             <td>${esc(a.model ?? "")}</td>
             <td>${tokens(a.tokensIn + a.tokensOut)}</td>
             <td class="dim">${ago(a.lastEventAt)}</td>
