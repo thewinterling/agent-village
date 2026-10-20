@@ -170,3 +170,36 @@ class TestDaemon:
         monkeypatch.setattr(top.urllib.request, "urlopen", refuse)
         with pytest.raises(RuntimeError, match="unreachable"):
             Daemon("http://127.0.0.1:1").get("/api/world")
+
+
+class TestNavigation:
+    @pytest.fixture
+    def screen(self):
+        # Top without curses: handle() only touches state for the navigation keys.
+        t = object.__new__(top.Top)
+        t.agents = [agent("a", "working"), agent("b", "done")]
+        t.selected, t.detail, t.note = "a", None, ""
+        t.focus_detail, t.detail_scroll, t.detail_h, t._next_detail = False, 0, 10, 0
+        return t
+
+    def test_the_arrows_pick_the_agent_until_enter_moves_into_the_chat(self, screen):
+        screen.handle(top.curses.KEY_DOWN)
+        assert (screen.selected, screen.focus_detail) == ("b", False)
+        screen.handle("\n")
+        screen.handle(top.curses.KEY_DOWN)
+        screen.handle(top.curses.KEY_NPAGE)
+        assert (screen.selected, screen.focus_detail, screen.detail_scroll) == ("b", True, 11)
+        screen.handle(top.curses.KEY_UP)
+        assert (screen.selected, screen.detail_scroll) == ("b", 10)
+
+    def test_esc_and_left_go_back_to_the_list(self, screen):
+        for key in ("\x1b", top.curses.KEY_LEFT):
+            screen.handle("\n")
+            screen.handle(key)
+            assert not screen.focus_detail
+        screen.handle(top.curses.KEY_UP)
+        assert screen.selected == "a"
+
+    def test_paging_only_scrolls_inside_the_chat(self, screen):
+        screen.handle(top.curses.KEY_NPAGE)
+        assert screen.detail_scroll == 0

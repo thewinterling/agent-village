@@ -41,7 +41,8 @@ and offers the same actions:
 .venv/bin/agent-top           # --url if villaged is not on 127.0.0.1:8847
 ```
 
-`↑↓`/`jk` select, `enter` toggles the details pane (`space`/`b` scroll it), `p` sends a prompt,
+`↑↓`/`jk` pick the agent whose chat the details pane shows. `enter` moves into the pane, where
+`↑↓` scroll and `PgUp`/`PgDn` page; `esc` or `←` goes back to the list. `p` sends a prompt,
 `r` renames, `s` stops, `d` dismisses, `q` quits.
 
 ### Keeping it up

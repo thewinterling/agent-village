@@ -35,7 +35,12 @@ STATE_COLOUR = {
     "gone": 0x6A7183,
 }
 
-KEYS = "↑↓ select  enter details  space/b scroll details  p prompt  r rename  s stop  d dismiss  q quit"
+ACTION_KEYS = "p prompt  r rename  s stop  d dismiss  q quit"
+#: The key hint per focus: the list picks whose chat the details pane shows, enter moves into it.
+KEYS = {
+    False: "↑↓ select  enter read chat  " + ACTION_KEYS,
+    True: "↑↓ scroll  PgUp/PgDn page  esc/← back to list  " + ACTION_KEYS,
+}
 POLL_S = 1.0
 DETAIL_POLL_S = 3.0
 #: Same pace as the web strip; the series moves a minute at a time.
@@ -212,7 +217,7 @@ def detail_lines(d: dict, width: int) -> list[tuple[str, str]]:
     out: list[tuple[str, str]] = []
 
     def para(text: str, style: str = "", indent: str = "") -> None:
-        for line in textwrap.wrap(text, width, initial_indent=indent, subsequent_indent=indent) or [""]:
+        for line in textwrap.wrap(text, width, initial_indent=indent, subsequent_indent=" " * len(indent)) or [""]:
             out.append((style, line))
 
     para(d.get("name") or d.get("sessionId", ""), "title")
@@ -280,8 +285,9 @@ class Top:
         self.usage: dict = {}
         self.selected: str | None = None
         self.detail: dict | None = None
-        self.detail_open = False
+        self.focus_detail = False
         self.detail_scroll = 0
+        self.detail_h = 10
         self.status = "connecting…"
         self.note = ""
         self._next_poll = 0.0
@@ -327,7 +333,7 @@ class Top:
                 self.usage = self.daemon.get("/api/usage")
             except RuntimeError:
                 pass  # keep the last series; the header already says the daemon is unreachable
-        if self.detail_open and self.selected and (force or now >= self._next_detail):
+        if self.selected and (force or now >= self._next_detail):
             self._next_detail = now + DETAIL_POLL_S
             try:
                 self.detail = self.daemon.detail(self.selected)
@@ -343,7 +349,7 @@ class Top:
         s = self.screen
         s.erase()
         height, width = s.getmaxyx()
-        if height < 8 or width < 40:
+        if height < 12 or width < 40:
             s.addstr(0, 0, fit("window too small", width - 1))
             s.refresh()
             return
@@ -352,17 +358,14 @@ class Top:
         # The usage footer only once there is room for it next to a usable list.
         foot_h = CHART_H + 3 if height >= 18 else 0
         body_h = height - 2 - foot_h
-        list_h = body_h
-        if self.detail_open:
-            list_h = max(5, body_h * 2 // 5)
-        self._box(1, 0, list_h, width, f" agents ({len(self.agents)}) ")
+        list_h = max(5, body_h * 2 // 5)
+        self._box(1, 0, list_h, width, f" agents ({len(self.agents)}) ", not self.focus_detail)
         self._table(2, 1, list_h - 2, width - 2)
-        if self.detail_open:
-            self._box(1 + list_h, 0, body_h - list_h, width, " details ")
-            self._detail(2 + list_h, 2, body_h - list_h - 2, width - 4)
+        self._box(1 + list_h, 0, body_h - list_h, width, " details ", self.focus_detail)
+        self._detail(2 + list_h, 2, body_h - list_h - 2, width - 4)
         if foot_h:
             self._footer(1 + body_h, width, foot_h)
-        s.addstr(height - 1, 0, fit(self.note or KEYS, width - 1), self.colour.get("dim", 0))
+        s.addstr(height - 1, 0, fit(self.note or KEYS[self.focus_detail], width - 1), self.colour.get("dim", 0))
         s.refresh()
 
     def _header(self, width: int) -> None:
@@ -393,9 +396,9 @@ class Top:
         for i, row in enumerate(chart(self.usage.get("buckets") or [], inner)):
             s.addstr(y + 2 + i, 2, row, self.colour.get("frame", 0))
 
-    def _box(self, y: int, x: int, h: int, w: int, title: str) -> None:
+    def _box(self, y: int, x: int, h: int, w: int, title: str, active: bool = True) -> None:
         # Drawn by hand: `border()` takes single-byte characters only, so no rounded corners.
-        frame = self.colour.get("frame", 0)
+        frame = self.colour.get("frame" if active else "dim", 0)
         s = self.screen
         s.addstr(y, x, "╭" + "─" * (w - 2) + "╮", frame)
         for row in range(y + 1, y + h - 1):
@@ -431,6 +434,7 @@ class Top:
             self.screen.addstr(y, x, "loading…", self.colour.get("dim", 0))
             return
         lines = detail_lines(self.detail, w)
+        self.detail_h = h
         self.detail_scroll = max(0, min(self.detail_scroll, len(lines) - h))
         styles = {
             "title": curses.A_BOLD,
@@ -492,6 +496,23 @@ class Top:
         match key:
             case "q" | "Q":
                 return False
+            case "\x1b" | curses.KEY_LEFT | "h":
+                self.focus_detail = False
+            case "\n" | "\r" | curses.KEY_ENTER | curses.KEY_RIGHT | "l":
+                self.focus_detail = True
+            # Inside the details pane the arrows scroll the chat; the selection stays put.
+            case curses.KEY_UP | "k" if self.focus_detail:
+                self.detail_scroll = max(0, self.detail_scroll - 1)
+            case curses.KEY_DOWN | "j" if self.focus_detail:
+                self.detail_scroll += 1
+            case curses.KEY_PPAGE | "b" if self.focus_detail:
+                self.detail_scroll = max(0, self.detail_scroll - self.detail_h)
+            case curses.KEY_NPAGE | " " if self.focus_detail:
+                self.detail_scroll += self.detail_h
+            case curses.KEY_HOME | "g" if self.focus_detail:
+                self.detail_scroll = 0
+            case curses.KEY_END | "G" if self.focus_detail:
+                self.detail_scroll = 1 << 30  # clamped to the last page when drawn
             case curses.KEY_UP | "k":
                 self._select(ids, at - 1)
             case curses.KEY_DOWN | "j":
@@ -500,16 +521,6 @@ class Top:
                 self._select(ids, 0)
             case curses.KEY_END | "G":
                 self._select(ids, len(ids) - 1)
-            case "\n" | "\r" | curses.KEY_ENTER | curses.KEY_RIGHT | "l":
-                self.detail_open = not self.detail_open if key in ("\n", "\r", curses.KEY_ENTER) else True
-                self.detail, self.detail_scroll = None, 0
-                self.poll(force=True)
-            case "\x1b" | curses.KEY_LEFT | "h":
-                self.detail_open = False
-            case curses.KEY_NPAGE | " ":
-                self.detail_scroll += 10
-            case curses.KEY_PPAGE | "b":
-                self.detail_scroll = max(0, self.detail_scroll - 10)
             case "p" if agent:
                 text = self.ask(f"prompt {fit(agent['name'], 30).rstrip()} > ")
                 if text and text.strip():
